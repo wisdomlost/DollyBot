@@ -83,6 +83,7 @@
       }
     });
     button.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') stop(); });
+    button.addEventListener('blur', () => { if (active === 'keyboard') stop(); });
   }
   for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     document.addEventListener(name, (e) => { if (active === e.pointerId) stop(); }, true);
@@ -91,6 +92,8 @@
   window.addEventListener('pagehide', stop);
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
   $('stop').addEventListener('click', stop);
+  $('stop').addEventListener('pointerdown', stop);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); });
   $('speed').addEventListener('input', () => { $('speed-value').textContent = `${$('speed').value}%`; });
   setInterval(() => {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
