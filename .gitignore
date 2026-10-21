@@ -1,0 +1,14 @@
+/build*/
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.local*
+/dependencies.lock
+/managed_components/
+/.vscode/
+/.idea/
+__pycache__/
+*.pyc
+*.log
+.env*
+!.env.example
+/tools/local.ps1

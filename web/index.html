@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#10181c"><title>DollyBot · 运镜控制</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><div><span class="eyebrow">MOTION / STUDIO</span><h1>DollyBot<span class="dot">.</span></h1></div><span id="connection" class="badge">连接中</span></header>
+<section class="hero"><div><span class="eyebrow">手动运镜</span><h2>让镜头，自由移动。</h2><p>按住移动，松手即停。每一次控制都从容精准。</p></div><span class="orbit" aria-hidden="true">◎</span></section>
+<div class="notice">模拟模式 · STM32 未连接 · 所有速度均为指令值，无真实测量数据</div>
+<section class="panel control"><div class="section-title"><h3>运动控制</h3><span id="motion">待机</span></div>
+<div id="joystick" role="group" aria-label="触摸摇杆"><div class="cross x"></div><div class="cross y"></div><span class="north">前进</span><span class="south">后退</span><div id="knob"></div></div>
+<div class="directions" aria-label="方向控制"><button data-linear="1" data-angular="0" aria-label="前进">↑</button><div><button data-linear="0" data-angular="1" aria-label="左转">←</button><span>按住方向</span><button data-linear="0" data-angular="-1" aria-label="右转">→</button></div><button data-linear="-1" data-angular="0" aria-label="后退">↓</button></div>
+<label for="speed">速度上限 <output id="speed-value">40%</output></label><input id="speed" type="range" min="10" max="100" value="40" step="5">
+<div class="scale"><span>精细运镜</span><span>快速移动</span></div><button id="stop" class="stop">■ &nbsp;立即停止</button><p class="hint">摇杆横向控制转向，纵向控制前后移动</p></section>
+<section class="panel"><div class="section-title"><h3>设备遥测</h3><span class="sim">SIMULATED</span></div><div class="metrics"><div><span>前进指令</span><strong id="linear">0.00</strong></div><div><span>转向指令</span><strong id="angular">0.00</strong></div><div><span>往返延迟</span><strong id="latency">—</strong></div></div><details><summary>连接与调试</summary><pre id="debug">等待设备响应…</pre></details></section>
+<section class="panel"><div class="section-title"><h3>轨迹工作台</h3><span class="muted">即将支持</span></div><div class="future"><button disabled>◉ 录制轨迹</button><button disabled>⌁ 轨迹预览</button><button disabled>▷ 自动回放</button></div><p class="hint">将在接入 STM32 里程计后开放</p></section>
+<footer>DOLLYBOT / ESP32 CONTROL · v0.1</footer>
+</main></body></html>

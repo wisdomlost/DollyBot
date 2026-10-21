@@ -1,0 +1,12 @@
+menu "DollyBot"
+config DOLLY_AP_SSID
+    string "Wi-Fi AP name"
+    default "DollyBot"
+config DOLLY_AP_PASSWORD
+    string "Wi-Fi AP password (8-63 ASCII characters)"
+    default "dollybot123"
+config DOLLY_AP_CHANNEL
+    int "Wi-Fi channel"
+    range 1 11
+    default 6
+endmenu
