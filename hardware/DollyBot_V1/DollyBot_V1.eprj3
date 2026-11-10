@@ -1,0 +1,175 @@
+{
+  "name": "DollyBot_V1",
+  "owner_uuid": "2535a49b045e4690b582cb92b3015e91",
+  "creator_uuid": "2535a49b045e4690b582cb92b3015e91",
+  "created_at": "2026-10-27 13:22:18",
+  "updated_at": "2026-10-27 13:22:18",
+  "modifier_uuid": "2535a49b045e4690b582cb92b3015e91",
+  "content": "",
+  "archive": false,
+  "cbb_project": 0,
+  "thumb": "",
+  "ticket": 1,
+  "g_ticket": 1,
+  "boards": [],
+  "block_symbol_attrs_groups": {},
+  "default_sheet": "36efa1184b20392b",
+  "branch_uuid": "",
+  "pcb_count": 0,
+  "format": "folder",
+  "profile": {
+    "boards": {
+      "7f16c3a335840d66": {
+        "uuid": "7f16c3a335840d66",
+        "title": "Board1",
+        "zIndex": 1
+      }
+    },
+    "schematics": {
+      "6aa2e6655e9d6666": {
+        "uuid": "6aa2e6655e9d6666",
+        "name": "mainboard",
+        "board": "7f16c3a335840d66",
+        "source": "",
+        "version": "1794314337471",
+        "updateTime": 1794314337471
+      },
+      "df3b5c36d7af2cd4": {
+        "uuid": "df3b5c36d7af2cd4",
+        "name": "encoder",
+        "board": "",
+        "source": "",
+        "version": "1794313745069",
+        "updateTime": 1794313745069
+      },
+      "f59c7fd5610e9b50": {
+        "uuid": "f59c7fd5610e9b50",
+        "name": "driver",
+        "board": "",
+        "source": "",
+        "version": "1794312820045",
+        "updateTime": 1794312820045
+      }
+    },
+    "sheets": {
+      "442fef08f5e0a50e": {
+        "uuid": "442fef08f5e0a50e",
+        "title": "MCU_Core",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 1,
+        "source": "",
+        "version": "1794314337471",
+        "updateTime": 1794314337471
+      },
+      "07505afa5ed67dbb": {
+        "uuid": "07505afa5ed67dbb",
+        "title": "Power",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 2,
+        "source": "",
+        "version": "1794311080372",
+        "updateTime": 1794311080372
+      },
+      "c67e8f2a499acfa9": {
+        "uuid": "c67e8f2a499acfa9",
+        "title": "interface",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 3,
+        "source": "",
+        "version": "1794314123616",
+        "updateTime": 1794314123616
+      },
+      "349cc6703cc3224b": {
+        "uuid": "349cc6703cc3224b",
+        "title": "Expansion",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 4,
+        "source": "",
+        "version": "1794312605121",
+        "updateTime": 1794312605121
+      },
+      "c624512adadb9ea8": {
+        "uuid": "c624512adadb9ea8",
+        "title": "P1",
+        "schematic_uuid": "f59c7fd5610e9b50",
+        "zIndex": 3,
+        "source": "",
+        "version": "1794312820045",
+        "updateTime": 1794312820045
+      },
+      "9bce36ac2cd56dbf": {
+        "uuid": "9bce36ac2cd56dbf",
+        "title": "P1",
+        "schematic_uuid": "df3b5c36d7af2cd4",
+        "zIndex": 3,
+        "source": "",
+        "version": "1794313745069",
+        "updateTime": 1794313745069
+      }
+    },
+    "pcbs": {
+      "5de121ae4888a022": {
+        "uuid": "5de121ae4888a022",
+        "title": "PCB1",
+        "board": "7f16c3a335840d66",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1793078539668",
+        "updateTime": 1793078539668
+      },
+      "4c09043e23af871e": {
+        "uuid": "4c09043e23af871e",
+        "title": "PCB1_1",
+        "board": "",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1794313606210",
+        "updateTime": 1794313606210
+      },
+      "74e5c6b999abaac9": {
+        "uuid": "74e5c6b999abaac9",
+        "title": "PCB1_2",
+        "board": "",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1794313745725",
+        "updateTime": 1794313745725
+      }
+    },
+    "panels": {
+      "90ef8df2e36c3e42": {
+        "uuid": "90ef8df2e36c3e42",
+        "title": "Panel1",
+        "zIndex": null
+      }
+    },
+    "blockSymbols": {},
+    "owner": {
+      "uuid": "2535a49b045e4690b582cb92b3015e91"
+    },
+    "simSchematics": {},
+    "simulations": {}
+  },
+  "config": {
+    "defaultSheet": "36efa1184b20392b",
+    "settings": {
+      "UNIVERSAL": {
+        "dataType": "UNIVERSAL",
+        "data": {
+          "allowLibRename": true,
+          "defaultNetName": true,
+          "wireMultipleNet": true,
+          "netFlagCrossLayerConnection": true,
+          "netLabelCrossPageConnection": true,
+          "busGenerateNetClass": true,
+          "relevanceDisplayRow": "SINGLE",
+          "relevanceBelongSchPage": "NAME",
+          "relevanceLocation": "ZONE",
+          "multipartCrossLayer": true,
+          "nonElectronicAddIntoBom": false,
+          "nonElectronicUpdatePcb": false
+        }
+      }
+    }
+  }
+}
