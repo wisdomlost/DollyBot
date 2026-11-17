@@ -122,7 +122,7 @@ private fun DrawScope.drawGrid(color: Color) {
     }
 }
 
-private fun DrawScope.drawHeading(color: Color, position: Offset, heading: Float) {
+internal fun DrawScope.drawHeading(color: Color, position: Offset, heading: Float) {
     val halfLength = 9.dp.toPx()
     val head = 4.dp.toPx()
     val tip = position + Offset(halfLength, 0f)

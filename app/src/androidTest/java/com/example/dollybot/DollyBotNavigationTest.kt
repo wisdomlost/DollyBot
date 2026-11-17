@@ -2,6 +2,7 @@ package com.example.dollybot
 
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,23 +21,23 @@ class DollyBotNavigationTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun teachingAndDeviceScreensKeepMotionControlsDisabled() {
-        text(R.string.stop).assertIsDisplayed().assertIsNotEnabled()
+    fun teachingAndDeviceScreensKeepTheirPreviewControlsDisabled() {
+        text(R.string.stop).assertIsDisplayed().assertIsEnabled()
         text(R.string.view_continuous_teaching).performScrollTo().performClick()
         text(R.string.continuous_teaching).assertIsDisplayed()
-        text(R.string.start_recording).performScrollTo().assertIsNotEnabled()
+        text(R.string.start_recording).assertIsDisplayed().assertIsNotEnabled()
         pressBack()
 
         text(R.string.view_waypoint_teaching).performScrollTo().performClick()
         text(R.string.waypoint_teaching).assertIsDisplayed()
-        text(R.string.capture_waypoint).performScrollTo().assertIsNotEnabled()
+        text(R.string.capture_waypoint).assertIsDisplayed().assertIsNotEnabled()
         toolbarBack()
 
         text(R.string.device).performClick()
         text(R.string.disconnected).assertIsDisplayed()
-        text(R.string.connect).assertIsNotEnabled()
-        text(R.string.uncalibrated).assertIsDisplayed()
-        text(R.string.calibrate).assertIsNotEnabled()
+        text(R.string.connect).performScrollTo().assertIsDisplayed()
+        text(R.string.uncalibrated).performScrollTo().assertIsDisplayed()
+        text(R.string.calibrate).performScrollTo().assertIsNotEnabled()
     }
 
     @Test

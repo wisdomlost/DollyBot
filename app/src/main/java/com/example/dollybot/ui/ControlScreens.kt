@@ -1,39 +1,82 @@
 package com.example.dollybot.ui
 
-import androidx.annotation.StringRes
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.dollybot.R
 import kotlin.math.roundToInt
+
+private const val GimbalPreviewAngleRange = 180f
 
 @Composable
 internal fun ControlScreen(
     state: DollyBotUiState,
-    actions: DollyBotActions,
+    motion: MotionInput,
+    gestureSession: Int,
+    onMove: (Float, Float) -> Unit,
+    onRotate: (DriveDirection, Boolean) -> Unit,
+    onGimbalChange: (Float, Float) -> Unit,
+    onStopMotion: () -> Unit,
     onContinuousTeaching: () -> Unit,
     onWaypointTeaching: () -> Unit
 ) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val stopMotion by rememberUpdatedState(onStopMotion)
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) stopMotion()
+        }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            stopMotion()
+        }
+    }
+
     PageStatus(
-        label = stringResource(R.string.interface_preview),
+        label = stringResource(
+            if (!state.device.live) R.string.interface_preview
+            else if (state.device.connection == ConnectionStatus.Connected) R.string.live_connection
+            else R.string.local_controls
+        ),
         status = stringResource(
             R.string.device_status_summary,
             stringResource(state.device.connection.label),
@@ -41,6 +84,12 @@ internal fun ControlScreen(
         ),
         isError = state.device.connection == ConnectionStatus.Error
     )
+    if (state.teaching?.activeMode == 1) {
+        NavigationRow(
+            stringResource(R.string.recording) + " · " + state.teaching.continuous.seconds + " s",
+            onContinuousTeaching
+        )
+    }
 
     Panel {
         Row(
@@ -49,7 +98,7 @@ internal fun ControlScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
-                modifier = Modifier.weight(1.15f),
+                modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -57,7 +106,23 @@ internal fun ControlScreen(
                     style = MaterialTheme.typography.titleSmall,
                     textAlign = TextAlign.Center
                 )
-                Joystick(actions)
+                ControlJoystick(
+                    position = Offset(motion.strafe, motion.forward),
+                    gestureSession = gestureSession,
+                    description = stringResource(R.string.drive_joystick),
+                    positionDescription = stringResource(
+                        R.string.motion_input_value,
+                        (motion.strafe * 100).roundToInt(),
+                        (motion.forward * 100).roundToInt()
+                    ),
+                    onPositionChange = { onMove(it.x, it.y) },
+                    onRelease = { onMove(0f, 0f) },
+                    modifier = Modifier.testTag("drive_joystick")
+                )
+                Text(
+                    stringResource(R.string.drive_joystick_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -69,24 +134,117 @@ internal fun ControlScreen(
                     style = MaterialTheme.typography.titleSmall,
                     textAlign = TextAlign.Center
                 )
-                PlaceholderButton(
-                    stringResource(R.string.turn_left),
-                    { actions.drive(DriveDirection.TurnLeft) },
-                    Modifier.fillMaxWidth()
-                )
-                PlaceholderButton(
-                    stringResource(R.string.turn_right),
-                    { actions.drive(DriveDirection.TurnRight) },
-                    Modifier.fillMaxWidth()
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RotationButton(
+                        label = stringResource(R.string.turn_left),
+                        gestureSession = gestureSession,
+                        onPressedChange = { onRotate(DriveDirection.TurnLeft, it) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    RotationButton(
+                        label = stringResource(R.string.turn_right),
+                        gestureSession = gestureSession,
+                        onPressedChange = { onRotate(DriveDirection.TurnRight, it) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Text(
+                    stringResource(
+                        when {
+                            motion.rotation < 0f -> R.string.turning_left
+                            motion.rotation > 0f -> R.string.turning_right
+                            else -> R.string.rotation_hold_hint
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
                 )
             }
         }
+        Text(
+            stringResource(
+                R.string.motion_input_value,
+                (motion.strafe * 100).roundToInt(),
+                (motion.forward * 100).roundToInt()
+            ),
+            modifier = Modifier.testTag("motion_input"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 
     Panel {
         Text(stringResource(R.string.gimbal), style = MaterialTheme.typography.titleMedium)
-        GimbalSlider(GimbalAxis.Yaw, state.yawDegrees, actions)
-        GimbalSlider(GimbalAxis.Pitch, state.pitchDegrees, actions)
+        Text(
+            stringResource(R.string.gimbal_joystick_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                ControlJoystick(
+                    position = Offset(
+                        state.yawDegrees / GimbalPreviewAngleRange,
+                        state.pitchDegrees / GimbalPreviewAngleRange
+                    ),
+                    gestureSession = gestureSession,
+                    description = stringResource(R.string.gimbal_joystick),
+                    positionDescription = stringResource(
+                        R.string.gimbal_position_value,
+                        state.yawDegrees.roundToInt(),
+                        state.pitchDegrees.roundToInt()
+                    ),
+                    onPositionChange = {
+                        onGimbalChange(it.x * GimbalPreviewAngleRange, it.y * GimbalPreviewAngleRange)
+                    },
+                    onRelease = {},
+                    modifier = Modifier.testTag("gimbal_joystick")
+                )
+                Text(
+                    stringResource(R.string.gimbal_hold_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier.testTag("gimbal_angles"),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        stringResource(
+                            R.string.gimbal_axis_value,
+                            stringResource(R.string.yaw),
+                            state.yawDegrees.roundToInt()
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        stringResource(
+                            R.string.gimbal_axis_value,
+                            stringResource(R.string.pitch),
+                            state.pitchDegrees.roundToInt()
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                PlaceholderButton(
+                    stringResource(R.string.gimbal_reset),
+                    { onGimbalChange(0f, 0f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+            }
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -96,68 +254,65 @@ internal fun ControlScreen(
 }
 
 @Composable
-private fun Joystick(actions: DollyBotActions) {
-    val colors = MaterialTheme.colorScheme
-    Box(modifier = Modifier.size(144.dp)) {
-        Canvas(Modifier.matchParentSize()) {
-            val radius = size.minDimension / 2 - 2.dp.toPx()
-            drawCircle(colors.surfaceContainer, radius)
-            drawCircle(colors.outlineVariant, radius, style = Stroke(1.dp.toPx()))
-            drawCircle(colors.outlineVariant, radius * 0.62f, style = Stroke(1.dp.toPx()))
-            drawCircle(colors.onSurfaceVariant, radius * 0.16f)
-        }
-        DirectionButton("↑", R.string.forward, Modifier.align(Alignment.TopCenter)) {
-            actions.drive(DriveDirection.Forward)
-        }
-        DirectionButton("↓", R.string.backward, Modifier.align(Alignment.BottomCenter)) {
-            actions.drive(DriveDirection.Backward)
-        }
-        DirectionButton("←", R.string.strafe_left, Modifier.align(Alignment.CenterStart)) {
-            actions.drive(DriveDirection.StrafeLeft)
-        }
-        DirectionButton("→", R.string.strafe_right, Modifier.align(Alignment.CenterEnd)) {
-            actions.drive(DriveDirection.StrafeRight)
-        }
-    }
-}
-
-@Composable
-private fun DirectionButton(
-    symbol: String,
-    @StringRes label: Int,
-    modifier: Modifier,
-    onClick: () -> Unit
+private fun RotationButton(
+    label: String,
+    gestureSession: Int,
+    onPressedChange: (Boolean) -> Unit,
+    modifier: Modifier
 ) {
-    val description = stringResource(label)
-    IconButton(
-        onClick = onClick,
-        enabled = false,
-        modifier = modifier.size(48.dp).semantics { contentDescription = description }
+    val colors = MaterialTheme.colorScheme
+    var pressed by remember(gestureSession) { mutableStateOf(false) }
+    val changePressed by rememberUpdatedState(onPressedChange)
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = if (pressed) colors.primary else colors.secondaryContainer,
+        contentColor = if (pressed) colors.onPrimary else colors.onSecondaryContainer
     ) {
-        Text(symbol, style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-@Composable
-private fun GimbalSlider(axis: GimbalAxis, angle: Float, actions: DollyBotActions) {
-    val label = stringResource(axis.label)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Slider(
-            value = angle,
-            onValueChange = { actions.adjustGimbal(axis, it) },
-            enabled = false,
-            valueRange = -180f..180f,
-            modifier = Modifier.weight(1f).semantics { contentDescription = label }
-        )
-        Text(
-            stringResource(R.string.angle_value, angle.roundToInt()),
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    onClick {
+                        changePressed(true)
+                        changePressed(false)
+                        true
+                    }
+                }
+                .onKeyEvent { event ->
+                    if (event.key != Key.Enter && event.key != Key.NumPadEnter &&
+                        event.key != Key.Spacebar
+                    ) return@onKeyEvent false
+                    pressed = event.type == KeyEventType.KeyDown
+                    changePressed(pressed)
+                    true
+                }
+                .focusable()
+                .pointerInput(gestureSession) {
+                    detectTapGestures(
+                        onPress = {
+                            pressed = true
+                            changePressed(true)
+                            try {
+                                tryAwaitRelease()
+                            } finally {
+                                pressed = false
+                                changePressed(false)
+                            }
+                        }
+                    )
+                }
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
@@ -166,6 +321,7 @@ internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
     val isError = state.connection == ConnectionStatus.Error
     val feedback = when (state.connection) {
         ConnectionStatus.Disconnected -> R.string.waiting_for_device
+        ConnectionStatus.Connecting -> R.string.bluetooth_handshaking
         ConnectionStatus.Connected -> if (state.calibrated) {
             R.string.calibration_complete
         } else {
@@ -174,7 +330,39 @@ internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
         ConnectionStatus.Error -> R.string.connection_error_feedback
     }
 
-    PageStatus(stringResource(R.string.interface_preview))
+    val connected = state.connection == ConnectionStatus.Connected
+    val connecting = state.connection == ConnectionStatus.Connecting
+    PageStatus(stringResource(if (state.live) R.string.live_connection else R.string.interface_preview))
+    if (state.live) {
+        Panel {
+            Text(stringResource(R.string.paired_devices), style = MaterialTheme.typography.titleMedium)
+            for (device in state.pairedDevices) {
+                Surface(
+                    onClick = { actions.selectDevice(device.address) },
+                    enabled = !connected && !connecting,
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = device.address == state.selectedAddress,
+                            onClick = null,
+                            enabled = !connected && !connecting
+                        )
+                        Column(Modifier.weight(1f).padding(8.dp)) {
+                            Text(device.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(device.address, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+            PlaceholderButton(
+                stringResource(R.string.refresh_paired_devices),
+                actions::refreshDevices,
+                enabled = !connected && !connecting && state.available
+            )
+        }
+    }
     Panel {
         InfoRow(
             stringResource(R.string.device_status),
@@ -186,9 +374,11 @@ internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
             state.name ?: stringResource(R.string.unknown_value)
         )
         PlaceholderButton(
-            stringResource(R.string.connect),
-            actions::connect,
-            modifier = Modifier.align(Alignment.End)
+            stringResource(if (connected || connecting) R.string.disconnect else R.string.connect),
+            if (connected || connecting) actions::disconnect else actions::connect,
+            modifier = Modifier.align(Alignment.End),
+            enabled = state.live && state.available &&
+                (connected || connecting || !state.permissionGranted || state.selectedAddress != null)
         )
         HorizontalDivider()
         InfoRow(
@@ -198,13 +388,14 @@ internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
         PlaceholderButton(
             stringResource(R.string.calibrate),
             actions::calibrate,
-            modifier = Modifier.align(Alignment.End)
+            modifier = Modifier.align(Alignment.End),
+            enabled = state.live && connected
         )
     }
     Panel {
         Text(stringResource(R.string.device_feedback), style = MaterialTheme.typography.titleMedium)
         Text(
-            stringResource(feedback),
+            state.message ?: stringResource(feedback),
             color = if (isError) {
                 MaterialTheme.colorScheme.error
             } else {

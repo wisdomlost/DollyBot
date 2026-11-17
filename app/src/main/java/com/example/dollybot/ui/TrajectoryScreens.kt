@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.dollybot.connection.LivePose
 import com.example.dollybot.R
 
 @Composable
@@ -65,59 +67,117 @@ internal fun TrajectoryListScreen(
 internal fun TeachingScreen(
     trajectory: TrajectoryUiState,
     recordingSeconds: Int?,
-    actions: DollyBotActions
+    actions: DollyBotActions,
+    modifier: Modifier = Modifier,
+    live: TeachingUiState? = null,
+    device: DeviceUiState = DeviceUiState()
 ) {
     val isWaypoint = trajectory.kind == TrajectoryKind.Waypoints
+    val run = if (isWaypoint) live?.waypoints else live?.continuous
     val status = when {
+        live?.busy == true -> R.string.teaching_pending
+        run?.phase == TeachingPhase.Interrupted -> R.string.teaching_interrupted
+        run?.phase == TeachingPhase.Finished -> R.string.teaching_finished
         isWaypoint -> R.string.waiting_for_waypoint
+        run?.phase == TeachingPhase.Recording -> R.string.recording
         recordingSeconds != null -> R.string.recording
         else -> R.string.waiting_for_recording
     }
-    PageStatus(stringResource(R.string.interface_preview), stringResource(status))
-    Panel {
-        Text(
-            stringResource(if (isWaypoint) R.string.sample_waypoints else R.string.sample_path),
-            style = MaterialTheme.typography.titleMedium
+    val examples = trajectory.points.mapIndexed { index, point ->
+        LivePose(
+            index * trajectory.durationSeconds * 1000L / (trajectory.points.size - 1).coerceAtLeast(1),
+            0, (point.x * 500).toInt(), (point.y * -500).toInt(),
+            point.heading + 90f, 0f, 0f
         )
-        Text(stringResource(R.string.heading_legend), style = MaterialTheme.typography.bodySmall)
-        TrajectoryDiagram(trajectory)
-        if (isWaypoint) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (label in listOf(R.string.waypoint_start, R.string.waypoint_middle, R.string.waypoint_end)) {
-                    Text(
-                        stringResource(label),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center
+    }
+    val ready = device.connection == ConnectionStatus.Connected && device.calibrated && live?.busy != true
+    Column(
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        PageStatus(
+            stringResource(if (live == null) R.string.interface_preview else device.connection.label),
+            stringResource(status),
+            isError = run?.phase == TeachingPhase.Interrupted
+        )
+        if (live?.message != null) {
+            Text(
+                live.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        Surface(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    stringResource(
+                        if (live == null) {
+                            if (isWaypoint) R.string.sample_waypoints else R.string.sample_path
+                        } else if (isWaypoint) R.string.live_waypoints else R.string.live_path
+                    ),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(stringResource(R.string.heading_legend), style = MaterialTheme.typography.bodySmall)
+                LiveTrajectoryDiagram(
+                    poses = if (live == null) examples else run!!.poses,
+                    current = live?.pose,
+                    waypoints = isWaypoint,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+                if (isWaypoint) {
+                    if (live != null) {
+                        Text(
+                            stringResource(R.string.waypoint_count, run!!.poses.size),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (label in listOf(R.string.waypoint_start, R.string.waypoint_middle, R.string.waypoint_end)) {
+                            Text(
+                                stringResource(label),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    val seconds = run?.seconds ?: recordingSeconds ?: 0
+                    InfoRow(
+                        stringResource(R.string.recording_duration),
+                        stringResource(R.string.recording_time, seconds / 60, seconds % 60)
                     )
                 }
             }
-        } else {
-            val seconds = recordingSeconds ?: 0
-            InfoRow(
-                stringResource(R.string.recording_duration),
-                stringResource(R.string.recording_time, seconds / 60, seconds % 60)
-            )
         }
-    }
-    if (isWaypoint) {
-        PlaceholderButton(
-            stringResource(R.string.capture_waypoint),
-            actions::captureWaypoint,
-            Modifier.fillMaxWidth()
-        )
-    } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (isWaypoint) {
             PlaceholderButton(
-                stringResource(R.string.start_recording),
-                actions::startRecording,
-                Modifier.weight(1f)
+                stringResource(R.string.capture_waypoint),
+                actions::captureWaypoint,
+                Modifier.fillMaxWidth(),
+                enabled = ready
             )
-            PlaceholderButton(
-                stringResource(R.string.finish_recording),
-                actions::finishRecording,
-                Modifier.weight(1f)
-            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PlaceholderButton(
+                    stringResource(R.string.start_recording),
+                    actions::startRecording,
+                    Modifier.weight(1f),
+                    enabled = ready && live?.activeMode != 1
+                )
+                PlaceholderButton(
+                    stringResource(R.string.finish_recording),
+                    actions::finishRecording,
+                    Modifier.weight(1f),
+                    enabled = ready && live?.activeMode == 1
+                )
+            }
         }
     }
 }

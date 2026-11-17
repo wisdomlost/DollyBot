@@ -24,6 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -68,6 +71,36 @@ private fun DollyBotNavigation(
 ) {
     var page by rememberSaveable { mutableStateOf(initialPage) }
     var selectedKind by rememberSaveable { mutableStateOf(TrajectoryKind.Waypoints) }
+    var yawDegrees by rememberSaveable { mutableFloatStateOf(state.yawDegrees) }
+    var pitchDegrees by rememberSaveable { mutableFloatStateOf(state.pitchDegrees) }
+    var strafe by remember { mutableFloatStateOf(0f) }
+    var forward by remember { mutableFloatStateOf(0f) }
+    var turningLeft by remember { mutableStateOf(false) }
+    var turningRight by remember { mutableStateOf(false) }
+    var controlGestureSession by remember { mutableIntStateOf(0) }
+    val rotation = (if (turningRight) 1f else 0f) - (if (turningLeft) 1f else 0f)
+    val motion = MotionInput(strafe, forward, rotation)
+
+    fun publishMotion() {
+        actions.move(
+            MotionInput(
+                strafe,
+                forward,
+                (if (turningRight) 1f else 0f) - (if (turningLeft) 1f else 0f)
+            )
+        )
+    }
+
+    fun stopControlMotion() {
+        strafe = 0f
+        forward = 0f
+        turningLeft = false
+        turningRight = false
+        controlGestureSession++
+        publishMotion()
+        actions.stopMotion()
+    }
+
     val parent = page.parent
     val title = stringResource(page.title)
     val trajectory = when (selectedKind) {
@@ -113,7 +146,11 @@ private fun DollyBotNavigation(
             if (parent == null) {
                 Column {
                     if (page == Page.Control) {
-                        MotionFooter(actions = actions)
+                        MotionFooter(
+                            actions = actions,
+                            stopEnabled = true,
+                            onStop = ::stopControlMotion
+                        )
                     }
                     NavigationBar(containerColor = colors.surface, tonalElevation = 0.dp) {
                         for (tab in tabs) {
@@ -140,42 +177,68 @@ private fun DollyBotNavigation(
         }
     ) { insets ->
         key(page, selectedKind) {
-            ScreenBody(
-                modifier = Modifier
-                    .padding(insets)
-                    .consumeWindowInsets(insets)
-            ) {
-                when (page) {
-                    Page.Control -> ControlScreen(
-                        state = state,
-                        actions = actions,
-                        onContinuousTeaching = { page = Page.ContinuousTeaching },
-                        onWaypointTeaching = { page = Page.WaypointTeaching }
-                    )
-                    Page.Trajectories -> TrajectoryListScreen(
-                        trajectories = listOf(state.waypointTrajectory, state.continuousTrajectory),
-                        onSelect = {
-                            selectedKind = it.kind
-                            page = Page.Editor
-                        }
-                    )
-                    Page.Device -> DeviceScreen(state.device, actions)
-                    Page.ContinuousTeaching -> TeachingScreen(
-                        trajectory = state.continuousTrajectory,
-                        recordingSeconds = state.recordingSeconds,
-                        actions = actions
-                    )
-                    Page.WaypointTeaching -> TeachingScreen(
-                        trajectory = state.waypointTrajectory,
-                        recordingSeconds = null,
-                        actions = actions
-                    )
-                    Page.Editor -> TrajectoryEditorScreen(
-                        trajectory = trajectory,
-                        actions = actions,
-                        onPlayback = { page = Page.Playback }
-                    )
-                    Page.Playback -> PlaybackScreen(trajectory, state.playback, actions)
+            val contentModifier = Modifier.padding(insets).consumeWindowInsets(insets)
+            if (page == Page.ContinuousTeaching || page == Page.WaypointTeaching) {
+                TeachingScreen(
+                    trajectory = if (page == Page.ContinuousTeaching) {
+                        state.continuousTrajectory
+                    } else state.waypointTrajectory,
+                    recordingSeconds = state.recordingSeconds,
+                    actions = actions,
+                    modifier = contentModifier,
+                    live = state.teaching,
+                    device = state.device
+                )
+            } else {
+                ScreenBody(
+                    modifier = contentModifier
+                ) {
+                    when (page) {
+                        Page.Control -> ControlScreen(
+                            state = if (state.device.live) state else state.copy(
+                                yawDegrees = yawDegrees, pitchDegrees = pitchDegrees
+                            ),
+                            motion = motion,
+                            gestureSession = controlGestureSession,
+                            onMove = { x, y ->
+                                strafe = x
+                                forward = y
+                                publishMotion()
+                            },
+                            onRotate = { direction, pressed ->
+                                when (direction) {
+                                    DriveDirection.TurnLeft -> turningLeft = pressed
+                                    DriveDirection.TurnRight -> turningRight = pressed
+                                    else -> Unit
+                                }
+                                publishMotion()
+                            },
+                            onGimbalChange = { yaw, pitch ->
+                                yawDegrees = yaw
+                                pitchDegrees = pitch
+                                actions.adjustGimbal(GimbalAxis.Yaw, yaw)
+                                actions.adjustGimbal(GimbalAxis.Pitch, pitch)
+                            },
+                            onStopMotion = ::stopControlMotion,
+                            onContinuousTeaching = { page = Page.ContinuousTeaching },
+                            onWaypointTeaching = { page = Page.WaypointTeaching }
+                        )
+                        Page.Trajectories -> TrajectoryListScreen(
+                            trajectories = listOf(state.waypointTrajectory, state.continuousTrajectory),
+                            onSelect = {
+                                selectedKind = it.kind
+                                page = Page.Editor
+                            }
+                        )
+                        Page.Device -> DeviceScreen(state.device, actions)
+                        Page.ContinuousTeaching, Page.WaypointTeaching -> Unit
+                        Page.Editor -> TrajectoryEditorScreen(
+                            trajectory = trajectory,
+                            actions = actions,
+                            onPlayback = { page = Page.Playback }
+                        )
+                        Page.Playback -> PlaybackScreen(trajectory, state.playback, actions)
+                    }
                 }
             }
         }

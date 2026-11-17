@@ -1,0 +1,105 @@
+# DollyBot 蓝牙模拟车
+
+## 启动
+
+在 PowerShell 中进入工程根目录，再启动模拟器。
+
+```powershell
+Set-Location 'D:\Android\project\Dollybot'
+& 'D:\anaconda\python.exe' -m simulator.app --port COM7
+```
+
+当前 Anaconda 已具备 pyserial 与 tkinter。使用其他 Python 环境时安装 pyserial。
+
+```powershell
+python -m pip install pyserial
+```
+
+模拟器窗口可以刷新、选择和打开串口，显示小车位置、朝向、云台角度、连续轨迹、关键点及协议错误数量。
+
+## 手机连接
+
+1. 在 Windows 蓝牙设置的“更多蓝牙设置 / COM 端口”中添加“传入”端口，保存后确认实际 COM 编号。
+2. 在 Android 系统蓝牙设置中与电脑配对。
+3. 模拟器打开该入站端口，手机安装工程生成的 APK。
+4. App 设备页点击“刷新已配对设备”，允许“附近设备”权限，选中电脑后连接。
+5. 等待握手成功，停稳后校准。校准建立新的坐标参考系。
+6. 连续示教页开始录制，返回控制页遥控小车，再回示教页结束录制。
+7. 关键点页首次取点会自动建立关键点会话。返回控制页移动，回到关键点页继续取点。
+
+若打开 COM7 提示找不到文件，先确认该端口已在 Windows 保存且属于“传入”。模拟器中的端口下拉框会列出系统当前可用端口。端口被其他串口程序占用时，需要先关闭占用程序。
+
+已完成的数据保存在当前 App / 模拟器进程内。本阶段提供遥控与实时示教，回放按钮保留为后续功能入口。
+
+## 协议 V1
+
+全部多字节整数为小端序。SPP UUID 为 `00001101-0000-1000-8000-00805F9B34FB`。
+
+```text
+A5 5A | VER:u8 | TYPE:u8 | SEQ:u16 | LEN:u16 | SESSION:u32 | PAYLOAD | CRC:u16
+```
+
+帧总长为 14 + LEN。VER 为 1，LEN 最大 256。CRC-16/CCITT-FALSE 覆盖 VER 至数据区末尾，初值 FFFF、多项式 1021、不反射、不异或，CRC 以小端序写入。标准测试串 123456789 的 CRC 为 29B1。
+
+手机为每次连接生成非零随机 SESSION，先发 HELLO。电脑仅接收当前会话的后续指令。请求 SEQ 为循环递增 u16，ACK 与 POINT 回显请求序号，STATUS 使用独立递增序号。
+
+| TYPE | 方向 | PAYLOAD |
+| --- | --- | --- |
+| 01 HELLO | 手机到电脑 | 空 |
+| 02 PING | 手机到电脑 | 空 |
+| 10 MOTION | 手机到电脑 | strafe:i16, forward:i16, rotation:i16 |
+| 11 GIMBAL | 手机到电脑 | yaw:i16, pitch:i16 |
+| 12 STOP | 手机到电脑 | 空 |
+| 20 CALIBRATE | 手机到电脑 | 空 |
+| 30 TEACH_BEGIN | 手机到电脑 | mode:u8, frame_id:u32 |
+| 31 TEACH_END | 手机到电脑 | teach_id:u32 |
+| 32 TAKE_POINT | 手机到电脑 | teach_id:u32 |
+| 80 ACK | 电脑到手机 | request_type:u8, result:u8, value:u32 |
+| 90 STATUS | 电脑到手机 | 下文定义的 34 字节位姿状态 |
+| 91 POINT | 电脑到手机 | 下文定义的 30 字节取点快照 |
+
+MOTION 分量为 -1000 到 1000，侧移向右、前进向前、右转为正。默认轴向速度为 200 mm/s，旋转速度为 90°/s。所有角度字段单位为 0.01°，云台范围为 ±180°，右偏航和上俯仰为正。
+
+世界坐标单位为毫米，+X 向右、+Y 向上，车身 yaw=0 指向 +Y，顺时针为正。mode=0 为空闲、1 为连续示教、2 为关键点示教。
+
+```text
+STATUS
+t_ms:u32, frame_id:u32, x_mm:i32, y_mm:i32,
+yaw:i16, gimbal_yaw:i16, gimbal_pitch:i16,
+mode:u8, flags:u8, teach_id:u32, point_index:u32, last_motion_seq:u16
+
+POINT
+teach_id:u32, point_index:u32, t_ms:u32, frame_id:u32,
+x_mm:i32, y_mm:i32, yaw:i16, gimbal_yaw:i16, gimbal_pitch:i16
+```
+
+t_ms 是电脑当前连接会话内的单调时间。flags 的 bit0 表示已校准，bit1 表示运动超时停车。连续模式的 point_index 从 1 开始，每个 STATUS 对应一个采样。关键点模式下表示累计取点数，点位数据通过 POINT 返回。
+
+ACK result 为 0 成功、1 状态不允许、2 未校准、3 参数错误、4 坐标系不匹配、5 不支持的命令或版本。value 在校准成功时为 frame_id，开始示教时为 teach_id，结束示教时为最终点数，其他情况为零。取点成功直接返回 POINT，失败返回 ACK。
+
+MOTION 与 GIMBAL 成功时不发送 ACK，参数错误时返回 ACK。其他命令等待响应 1 秒，最多重试两次，使用原序号。电脑缓存最近 256 条离散请求的完整响应。
+
+手机以 20 Hz 刷新运动指令，松手立即发送零输入。300 ms 无运动指令则停车，云台保持最后角度。每秒心跳，3 秒没有有效手机消息则中断示教。连续示教开始和结束各补一个即时样本，最终样本排在结束 ACK 前。
+
+## 已核对的十六进制样例
+
+会话号均为 12345678。
+
+```text
+侧移 50%、前进 30%、旋转为零
+A5 5A 01 10 04 00 06 00 78 56 34 12 F4 01 2C 01 00 00 73 D5
+
+云台偏航 30°、俯仰 -15°
+A5 5A 01 11 05 00 04 00 78 56 34 12 B8 0B 24 FA 4C AE
+
+校准成功，frame_id=1
+A5 5A 01 80 02 00 06 00 78 56 34 12 20 00 01 00 00 00 30 F5
+```
+
+## 验证
+
+```powershell
+& 'D:\anaconda\python.exe' -m unittest discover -s simulator/tests -v
+```
+
+Android 单元测试包含同一组协议样例、拆包粘包、CRC 错误恢复和字段顺序检查。仪器测试检查示教画布与底部按钮布局，以及原有控制和导航行为。

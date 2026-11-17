@@ -118,14 +118,17 @@ internal fun PlaceholderButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isStop: Boolean = false
+    isStop: Boolean = false,
+    enabled: Boolean = false
 ) {
     val colors = MaterialTheme.colorScheme
     Button(
         onClick = onClick,
-        enabled = false,
+        enabled = enabled,
         modifier = modifier.heightIn(min = 48.dp),
         colors = ButtonDefaults.buttonColors(
+            containerColor = if (isStop) colors.errorContainer else colors.primary,
+            contentColor = if (isStop) colors.onErrorContainer else colors.onPrimary,
             disabledContainerColor = if (isStop) colors.errorContainer else colors.surfaceVariant,
             disabledContentColor = if (isStop) colors.onErrorContainer else colors.onSurfaceVariant
         )
@@ -138,7 +141,9 @@ internal fun PlaceholderButton(
 internal fun MotionFooter(
     actions: DollyBotActions,
     showStart: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    stopEnabled: Boolean = false,
+    onStop: () -> Unit = actions::stopMotion
 ) {
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
         Row(
@@ -154,9 +159,10 @@ internal fun MotionFooter(
             }
             PlaceholderButton(
                 stringResource(R.string.stop),
-                actions::stopMotion,
+                onStop,
                 modifier = Modifier.weight(1f),
-                isStop = true
+                isStop = true,
+                enabled = stopEnabled
             )
         }
     }
