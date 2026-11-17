@@ -1,0 +1,1 @@
+"""DollyBot binary-protocol simulator."""
