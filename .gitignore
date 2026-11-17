@@ -33,7 +33,7 @@ local.properties
 /.kotlin/
 *.apk
 !apk/
-!apk/DollyBot.apk
+!outside_androidstudio/apk/DollyBot.apk
 *.aab
 *.jks
 *.keystore
