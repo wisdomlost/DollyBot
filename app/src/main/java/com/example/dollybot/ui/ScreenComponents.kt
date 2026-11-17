@@ -138,37 +138,6 @@ internal fun PlaceholderButton(
 }
 
 @Composable
-internal fun MotionFooter(
-    actions: DollyBotActions,
-    showStart: Boolean = false,
-    modifier: Modifier = Modifier,
-    stopEnabled: Boolean = false,
-    onStop: () -> Unit = actions::stopMotion
-) {
-    Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (showStart) {
-                PlaceholderButton(
-                    stringResource(R.string.start),
-                    actions::startPlayback,
-                    Modifier.weight(1f)
-                )
-            }
-            PlaceholderButton(
-                stringResource(R.string.stop),
-                onStop,
-                modifier = Modifier.weight(1f),
-                isStop = true,
-                enabled = stopEnabled
-            )
-        }
-    }
-}
-
-@Composable
 internal fun NavigationRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,

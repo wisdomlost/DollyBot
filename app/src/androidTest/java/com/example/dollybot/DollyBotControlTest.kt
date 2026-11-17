@@ -18,6 +18,10 @@ import com.example.dollybot.ui.DollyBotApp
 import com.example.dollybot.ui.GimbalAxis
 import com.example.dollybot.ui.MotionInput
 import com.example.dollybot.ui.NoOpDollyBotActions
+import com.example.dollybot.ui.DollyBotUiState
+import com.example.dollybot.ui.RecordingUiState
+import com.example.dollybot.ui.RecordingStage
+import com.example.dollybot.ui.TrajectoryKind
 import com.example.dollybot.ui.theme.DollybotTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,7 +38,14 @@ class DollyBotControlTest {
     private fun recordActions() {
         compose.runOnUiThread {
             compose.activity.setContent {
-                DollybotTheme { DollyBotApp(actions = actions) }
+                DollybotTheme {
+                    DollyBotApp(
+                        state = DollyBotUiState(recording = RecordingUiState(
+                            mode = TrajectoryKind.Continuous, stage = RecordingStage.Recording
+                        )),
+                        actions = actions
+                    )
+                }
             }
         }
     }

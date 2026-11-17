@@ -1,4 +1,4 @@
-"""Run from the repository root: python -m simulator.app --port COM7."""
+"""Run from the repository root: python -m simulator.app --port COM4."""
 
 import argparse
 import math
@@ -217,7 +217,7 @@ class SimulatorWindow:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", default="", help="Windows Bluetooth incoming COM port, e.g. COM7")
+    parser.add_argument("--port", default="", help="Windows Bluetooth incoming COM port, e.g. COM4")
     args = parser.parse_args()
     root = tk.Tk()
     SimulatorWindow(root, args.port)

@@ -20,15 +20,15 @@ class DollyBotTeachingLayoutTest {
     val compose = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun bothTeachingCanvasesExpandAndKeepTheirOriginalActionsVisible() {
+    fun bothTeachingCanvasesExpandAndOnlyShowRecordedData() {
         compose.onNodeWithText("查看连续示教").performScrollTo().performClick()
         checkExpandedCanvas()
-        compose.onNodeWithText("开始录制").assertIsDisplayed()
-        compose.onNodeWithText("结束录制").assertIsDisplayed()
+        compose.onNodeWithText("开始录制").assertDoesNotExist()
+        compose.onNodeWithText("结束录制").assertDoesNotExist()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("查看关键点示教").performScrollTo().performClick()
         checkExpandedCanvas()
-        compose.onNodeWithText("取点").assertIsDisplayed()
+        compose.onNodeWithText("取点").assertDoesNotExist()
     }
 
     private fun checkExpandedCanvas() {

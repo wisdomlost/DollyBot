@@ -3,61 +3,111 @@ package com.example.dollybot.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.dollybot.connection.LivePose
 import com.example.dollybot.R
+import com.example.dollybot.trajectory.PreviewTimeline
+import com.example.dollybot.trajectory.SavedTrajectory
+import com.example.dollybot.trajectory.TrajectoryEditorState
+import java.text.DateFormat
+import java.util.Date
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrajectoryListScreen(
-    trajectories: List<TrajectoryUiState>,
-    onSelect: (TrajectoryUiState) -> Unit
+    state: DollyBotUiState,
+    examples: Boolean,
+    kind: TrajectoryKind,
+    onSourceChange: (Boolean) -> Unit,
+    onKindChange: (TrajectoryKind) -> Unit,
+    onSelect: (SavedTrajectory) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    PageStatus(stringResource(R.string.sample_trajectories))
-    for (trajectory in trajectories) {
-        Surface(
-            onClick = { onSelect(trajectory) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface
+    val trajectories = if (examples) emptyList() else state.trajectories.filter { it.kind == kind }
+    Column(modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = if (examples) 0 else 1, containerColor = MaterialTheme.colorScheme.surface) {
+            Tab(selected = examples, onClick = { onSourceChange(true) },
+                text = { Text(stringResource(R.string.example_library)) })
+            Tab(selected = !examples, onClick = { onSourceChange(false) },
+                text = { Text(stringResource(R.string.my_trajectories)) })
+        }
+        SecondaryTabRow(
+            selectedTabIndex = if (kind == TrajectoryKind.Continuous) 0 else 1,
+            containerColor = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(trajectory.name),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Chevron()
+            for (type in listOf(TrajectoryKind.Continuous, TrajectoryKind.Waypoints)) {
+                Tab(selected = kind == type, onClick = { onKindChange(type) },
+                    text = { Text(stringResource(type.label)) })
+            }
+        }
+        if (state.libraryLoading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        } else if (trajectories.isEmpty()) {
+            Text(
+                stringResource(if (examples) R.string.no_example_trajectories else R.string.no_saved_trajectories),
+                modifier = Modifier.padding(24.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)
+        ) {
+            items(trajectories, key = { it.id }) { trajectory ->
+                Surface(
+                    onClick = { onSelect(trajectory) },
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(trajectory.name, style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            val details = if (kind == TrajectoryKind.Continuous) {
+                                val timeline = remember(trajectory) { PreviewTimeline(trajectory) }
+                                formatPreviewTime(timeline.durationMs)
+                            } else stringResource(R.string.waypoint_count, trajectory.points.size)
+                            Text(
+                                details + " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                                    .format(Date(trajectory.updatedAt)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (trajectory.incomplete) {
+                                Text(stringResource(R.string.incomplete_trajectory),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        Chevron()
+                    }
                 }
-                Text(
-                    text = when (trajectory.kind) {
-                        TrajectoryKind.Waypoints ->
-                            stringResource(R.string.waypoint_summary, trajectory.points.size)
-                        TrajectoryKind.Continuous ->
-                            stringResource(R.string.continuous_summary, trajectory.durationSeconds)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TrajectoryDiagram(trajectory, compact = true)
             }
         }
     }
@@ -65,291 +115,128 @@ internal fun TrajectoryListScreen(
 
 @Composable
 internal fun TeachingScreen(
-    trajectory: TrajectoryUiState,
-    recordingSeconds: Int?,
-    actions: DollyBotActions,
-    modifier: Modifier = Modifier,
-    live: TeachingUiState? = null,
-    device: DeviceUiState = DeviceUiState()
+    kind: TrajectoryKind,
+    teaching: TeachingUiState,
+    device: DeviceUiState,
+    modifier: Modifier = Modifier
 ) {
-    val isWaypoint = trajectory.kind == TrajectoryKind.Waypoints
-    val run = if (isWaypoint) live?.waypoints else live?.continuous
+    val waypoint = kind == TrajectoryKind.Waypoints
+    val run = if (waypoint) teaching.waypoints else teaching.continuous
     val status = when {
-        live?.busy == true -> R.string.teaching_pending
-        run?.phase == TeachingPhase.Interrupted -> R.string.teaching_interrupted
-        run?.phase == TeachingPhase.Finished -> R.string.teaching_finished
-        isWaypoint -> R.string.waiting_for_waypoint
-        run?.phase == TeachingPhase.Recording -> R.string.recording
-        recordingSeconds != null -> R.string.recording
-        else -> R.string.waiting_for_recording
+        run.phase == TeachingPhase.Empty && waypoint -> R.string.waiting_for_waypoint
+        else -> run.phase.label
     }
-    val examples = trajectory.points.mapIndexed { index, point ->
-        LivePose(
-            index * trajectory.durationSeconds * 1000L / (trajectory.points.size - 1).coerceAtLeast(1),
-            0, (point.x * 500).toInt(), (point.y * -500).toInt(),
-            point.heading + 90f, 0f, 0f
-        )
-    }
-    val ready = device.connection == ConnectionStatus.Connected && device.calibrated && live?.busy != true
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        PageStatus(
-            stringResource(if (live == null) R.string.interface_preview else device.connection.label),
-            stringResource(status),
-            isError = run?.phase == TeachingPhase.Interrupted
-        )
-        if (live?.message != null) {
-            Text(
-                live.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
+        PageStatus(stringResource(device.connection.label), stringResource(status),
+            isError = run.phase == TeachingPhase.Interrupted)
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shape = MaterialTheme.shapes.large
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(14.dp),
+                Modifier.fillMaxSize().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    stringResource(
-                        if (live == null) {
-                            if (isWaypoint) R.string.sample_waypoints else R.string.sample_path
-                        } else if (isWaypoint) R.string.live_waypoints else R.string.live_path
-                    ),
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Text(stringResource(if (waypoint) R.string.live_waypoints else R.string.live_path),
+                    style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.heading_legend), style = MaterialTheme.typography.bodySmall)
                 LiveTrajectoryDiagram(
-                    poses = if (live == null) examples else run!!.poses,
-                    current = live?.pose,
-                    waypoints = isWaypoint,
+                    poses = run.poses, current = teaching.pose, waypoints = waypoint,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
-                if (isWaypoint) {
-                    if (live != null) {
-                        Text(
-                            stringResource(R.string.waypoint_count, run!!.poses.size),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (label in listOf(R.string.waypoint_start, R.string.waypoint_middle, R.string.waypoint_end)) {
-                            Text(
-                                stringResource(label),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+                if (waypoint) {
+                    Text(stringResource(R.string.waypoint_count, run.poses.size))
                 } else {
-                    val seconds = run?.seconds ?: recordingSeconds ?: 0
-                    InfoRow(
-                        stringResource(R.string.recording_duration),
-                        stringResource(R.string.recording_time, seconds / 60, seconds % 60)
+                    InfoRow(stringResource(R.string.recording_duration), formatPreviewTime(run.seconds * 1000L))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TrajectoryEditorScreen(editor: TrajectoryEditorState, actions: DollyBotActions) {
+    val trajectory = editor.edited
+    val waypoint = trajectory.kind == TrajectoryKind.Waypoints
+    val timeline = remember(trajectory.kind, trajectory.points) { PreviewTimeline(trajectory) }
+    val pose = remember(timeline, editor.elapsedMs) { timeline.poseAt(editor.elapsedMs) }
+    val selectedIndex = trajectory.points.indexOfFirst { it.id == editor.selectedPointId }
+    OutlinedTextField(
+        value = trajectory.name,
+        onValueChange = actions::renameEditedTrajectory,
+        label = { Text(stringResource(R.string.trajectory_name)) },
+        modifier = Modifier.fillMaxWidth().testTag("trajectory_name"),
+        singleLine = true,
+        enabled = !editor.saving,
+        isError = trajectory.name.trim().isEmpty()
+    )
+    PageStatus(stringResource(trajectory.kind.label),
+        if (trajectory.incomplete) stringResource(R.string.incomplete_trajectory) else null)
+    LiveTrajectoryDiagram(
+        poses = trajectory.points.map { it.pose }, current = pose, waypoints = waypoint,
+        selectedIndex = selectedIndex.takeIf { it >= 0 },
+        emptyMessage = stringResource(R.string.keep_one_point),
+        modifier = Modifier.fillMaxWidth().height(270.dp)
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+            onClick = actions::togglePreview,
+            enabled = !editor.saving && trajectory.points.size > 1 && timeline.durationMs > 0,
+            modifier = Modifier.weight(1f)
+        ) { Text(stringResource(if (editor.playing) R.string.pause_preview else R.string.play_preview)) }
+        Button(
+            onClick = actions::resetPreview,
+            enabled = !editor.saving && trajectory.points.isNotEmpty(),
+            modifier = Modifier.weight(1f)
+        ) { Text(stringResource(R.string.reset_preview)) }
+    }
+    LinearProgressIndicator(
+        progress = { if (timeline.durationMs == 0L) 0f else editor.elapsedMs.toFloat() / timeline.durationMs },
+        modifier = Modifier.fillMaxWidth()
+    )
+    InfoRow(formatPreviewTime(editor.elapsedMs), formatPreviewTime(timeline.durationMs))
+    if (editor.message != null) {
+        Text(editor.message, color = MaterialTheme.colorScheme.error)
+    }
+    if (waypoint) {
+        Text(stringResource(R.string.point_order), style = MaterialTheme.typography.titleMedium)
+        trajectory.points.forEachIndexed { index, point ->
+            Surface(
+                onClick = { actions.selectEditedPoint(point.id) },
+                enabled = !editor.saving,
+                shape = MaterialTheme.shapes.medium,
+                color = if (index == selectedIndex) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().testTag("point_" + point.id)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.point_position, index + 1, point.pose.xMm, point.pose.yMm))
+                    Text(
+                        stringResource(R.string.point_angles, point.pose.yawDegrees,
+                            point.pose.gimbalYaw, point.pose.gimbalPitch),
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
         }
-        if (isWaypoint) {
-            PlaceholderButton(
-                stringResource(R.string.capture_waypoint),
-                actions::captureWaypoint,
-                Modifier.fillMaxWidth(),
-                enabled = ready
-            )
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PlaceholderButton(
-                    stringResource(R.string.start_recording),
-                    actions::startRecording,
-                    Modifier.weight(1f),
-                    enabled = ready && live?.activeMode != 1
-                )
-                PlaceholderButton(
-                    stringResource(R.string.finish_recording),
-                    actions::finishRecording,
-                    Modifier.weight(1f),
-                    enabled = ready && live?.activeMode == 1
-                )
-            }
+        if (trajectory.points.isEmpty()) {
+            Text(stringResource(R.string.keep_one_point), color = MaterialTheme.colorScheme.error)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PlaceholderButton(stringResource(R.string.move_point_up), { actions.moveEditedPoint(-1) },
+                Modifier.weight(1f), enabled = !editor.saving && selectedIndex > 0)
+            PlaceholderButton(stringResource(R.string.move_point_down), { actions.moveEditedPoint(1) },
+                Modifier.weight(1f), enabled = !editor.saving && selectedIndex >= 0 &&
+                    selectedIndex < trajectory.points.lastIndex)
+            PlaceholderButton(stringResource(R.string.delete_point), actions::deleteEditedPoint,
+                Modifier.weight(1f), isStop = true, enabled = !editor.saving && selectedIndex >= 0)
         }
     }
 }
 
-@Composable
-internal fun TrajectoryEditorScreen(
-    trajectory: TrajectoryUiState,
-    actions: DollyBotActions,
-    onPlayback: () -> Unit
-) {
-    val isWaypoint = trajectory.kind == TrajectoryKind.Waypoints
-    PageStatus(stringResource(R.string.sample_trajectories), stringResource(trajectory.kind.label))
-    Panel {
-        TrajectoryDiagram(trajectory)
-        Text(stringResource(R.string.heading_legend), style = MaterialTheme.typography.bodySmall)
-    }
-    Panel {
-        OutlinedTextField(
-            value = stringResource(trajectory.name),
-            onValueChange = {},
-            label = { Text(stringResource(R.string.trajectory_name)) },
-            enabled = false,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (isWaypoint) {
-            Text(stringResource(R.string.connection_mode), style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = true,
-                    onClick = {},
-                    label = { Text(stringResource(R.string.straight)) },
-                    enabled = false
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = {},
-                    label = { Text(stringResource(R.string.curve)) },
-                    enabled = false
-                )
-            }
-            InfoRow(
-                stringResource(R.string.point_order),
-                trajectory.points.indices.joinToString(" · ") { (it + 1).toString() }
-            )
-        } else {
-            InfoRow(
-                stringResource(R.string.original_duration),
-                stringResource(R.string.seconds_value, trajectory.durationSeconds)
-            )
-        }
-        InfoRow(stringResource(R.string.speed_multiplier), speedLabel(trajectory.speed))
-        InfoRow(
-            stringResource(if (isWaypoint) R.string.waypoint_dwell else R.string.dwell_time),
-            stringResource(R.string.seconds_value, trajectory.dwellSeconds)
-        )
-        InfoRow(
-            stringResource(R.string.repeat_count),
-            stringResource(R.string.repeats_value, trajectory.repetitions)
-        )
-    }
-    Panel {
-        Text(stringResource(R.string.gimbal_keyframes), style = MaterialTheme.typography.titleMedium)
-        for (frame in trajectory.keyframes) {
-            InfoRow(
-                stringResource(
-                    if (isWaypoint) R.string.waypoint_number else R.string.seconds_value,
-                    frame.position
-                ),
-                stringResource(R.string.keyframe_angles, frame.yawDegrees, frame.pitchDegrees)
-            )
-        }
-    }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        PlaceholderButton(
-            stringResource(R.string.save),
-            { actions.save(trajectory) },
-            Modifier.weight(1f)
-        )
-        NavigationRow(stringResource(R.string.view_playback), onPlayback, Modifier.weight(1f))
-    }
-}
-
-@Composable
-internal fun PlaybackScreen(
-    trajectory: TrajectoryUiState,
-    state: PlaybackUiState,
-    actions: DollyBotActions
-) {
-    val isFault = state.phase == PlaybackPhase.Fault
-    PageStatus(
-        stringResource(R.string.sample_trajectories),
-        stringResource(state.phase.label),
-        isError = isFault
-    )
-    Panel {
-        Text(
-            stringResource(
-                R.string.playback_route_title,
-                stringResource(trajectory.name),
-                stringResource(
-                    if (trajectory.kind == TrajectoryKind.Waypoints) R.string.straight else trajectory.kind.label
-                )
-            ),
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            stringResource(
-                R.string.playback_settings,
-                speedLabel(trajectory.speed),
-                stringResource(R.string.seconds_value, trajectory.dwellSeconds),
-                stringResource(R.string.repeats_value, trajectory.repetitions)
-            ),
-            style = MaterialTheme.typography.bodyMedium
-        )
-        TrajectoryDiagram(trajectory)
-    }
-    Panel {
-        StatusActionRow(
-            label = stringResource(R.string.task_status),
-            status = stringResource(if (state.uploaded) R.string.uploaded else R.string.not_uploaded),
-            actionLabel = stringResource(R.string.upload),
-            onClick = { actions.upload(trajectory) }
-        )
-        HorizontalDivider()
-        StatusActionRow(
-            label = stringResource(R.string.start_status),
-            status = stringResource(if (state.startConfirmed) R.string.confirmed else R.string.unconfirmed),
-            actionLabel = stringResource(R.string.confirm_start),
-            onClick = actions::confirmStart
-        )
-    }
-    Panel {
-        val progress = state.progressPercent.coerceIn(0, 100)
-        InfoRow(stringResource(R.string.task_progress), stringResource(R.string.progress_value, progress))
-        LinearProgressIndicator(
-            progress = { progress / 100f },
-            modifier = Modifier.fillMaxWidth(),
-            color = if (isFault) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-        )
-        if (isFault) {
-            Text(
-                stringResource(R.string.playback_fault_feedback),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusActionRow(label: String, status: String, actionLabel: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                status,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        PlaceholderButton(actionLabel, onClick)
-    }
-}
-
-@Composable
-private fun speedLabel(speed: Float): String =
-    stringResource(R.string.speed_value, speed.toString().removeSuffix(".0"))
+internal fun formatPreviewTime(millis: Long): String =
+    "%02d:%02d".format(millis.coerceAtLeast(0) / 60000, millis.coerceAtLeast(0) / 1000 % 60)

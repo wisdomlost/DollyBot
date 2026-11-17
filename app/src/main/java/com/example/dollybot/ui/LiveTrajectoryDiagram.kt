@@ -33,7 +33,9 @@ internal fun LiveTrajectoryDiagram(
     poses: List<LivePose>,
     current: LivePose?,
     waypoints: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedIndex: Int? = null,
+    emptyMessage: String? = null
 ) {
     val colors = MaterialTheme.colorScheme
     val measurer = rememberTextMeasurer()
@@ -84,6 +86,9 @@ internal fun LiveTrajectoryDiagram(
                         val label = measurer.measure((index + 1).toString(), labelStyle)
                         val radius = maxOf(11.dp.toPx(), label.size.height / 2f + 2.dp.toPx())
                         val point = position(pose)
+                        if (index == selectedIndex) {
+                            drawCircle(colors.primary, radius + 5.dp.toPx(), point, style = Stroke(2.dp.toPx()))
+                        }
                         drawCircle(colors.primary, radius, point)
                         drawText(label, topLeft = point - Offset(label.size.width / 2f, label.size.height / 2f))
                         drawHeading(colors.primary, point - Offset(0f, 30.dp.toPx()), pose.yawDegrees - 90f)
@@ -94,14 +99,16 @@ internal fun LiveTrajectoryDiagram(
                 if (car != null) {
                     val point = position(car)
                     val angle = Math.toRadians(car.yawDegrees.toDouble())
-                    val tip = point + Offset(
-                        sin(angle).toFloat() * 26.dp.toPx(),
-                        -cos(angle).toFloat() * 26.dp.toPx()
-                    )
-                    drawCircle(colors.surface, 8.dp.toPx(), point)
-                    drawCircle(colors.primary, 8.dp.toPx(), point, style = Stroke(2.dp.toPx()))
-                    drawLine(colors.primary, point, tip, 2.dp.toPx(), StrokeCap.Round)
-                    val back = point - tip
+                    val onNumberedPoint = waypoints && poses.any {
+                        (position(it) - point).getDistance() < 20.dp.toPx()
+                    }
+                    val radius = if (onNumberedPoint) 19.dp.toPx() else 8.dp.toPx()
+                    val direction = Offset(sin(angle).toFloat(), -cos(angle).toFloat())
+                    val tip = point + direction * (radius + 18.dp.toPx())
+                    if (!onNumberedPoint) drawCircle(colors.surface, radius, point)
+                    drawCircle(colors.primary, radius, point, style = Stroke(2.dp.toPx()))
+                    drawLine(colors.primary, point + direction * radius, tip, 2.dp.toPx(), StrokeCap.Round)
+                    val back = -direction * 26.dp.toPx()
                     val wing = Offset(-back.y, back.x) * 0.17f
                     drawLine(colors.primary, tip, tip + back * 0.28f + wing, 2.dp.toPx())
                     drawLine(colors.primary, tip, tip + back * 0.28f - wing, 2.dp.toPx())
@@ -109,7 +116,7 @@ internal fun LiveTrajectoryDiagram(
             }
             if (all.isEmpty()) {
                 Text(
-                    stringResource(R.string.empty_live_path),
+                    emptyMessage ?: stringResource(R.string.empty_live_path),
                     modifier = Modifier.align(Alignment.Center).padding(16.dp),
                     style = MaterialTheme.typography.bodyMedium
                 )

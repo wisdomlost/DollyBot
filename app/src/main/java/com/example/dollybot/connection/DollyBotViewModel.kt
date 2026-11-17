@@ -23,29 +23,48 @@ import com.example.dollybot.ui.PairedDevice
 import com.example.dollybot.ui.TeachingPhase
 import com.example.dollybot.ui.TeachingRun
 import com.example.dollybot.ui.TeachingUiState
+import com.example.dollybot.ui.TrajectoryKind
+import com.example.dollybot.ui.RecordingStage
+import com.example.dollybot.ui.RecordingUiState
+import com.example.dollybot.trajectory.SavedTrajectory
+import com.example.dollybot.trajectory.TrajectoryEditorState
+import com.example.dollybot.trajectory.TrajectoryStore
+import com.example.dollybot.trajectory.PreviewTimeline
 import java.io.IOException
 import java.security.SecureRandom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.math.roundToInt
+import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-internal class DollyBotViewModel(application: Application) :
+internal class DollyBotViewModel @JvmOverloads constructor(
+    application: Application,
+    private val store: TrajectoryStore = TrajectoryStore(application),
+    private val createLink: (CoroutineScope, (Packet) -> Unit, (Throwable) -> Unit) -> CarLink = ::BluetoothLink
+) :
     AndroidViewModel(application), DollyBotActions by NoOpDollyBotActions {
 
     private val mutableState = MutableStateFlow(
-        DollyBotUiState(device = DeviceUiState(live = true), teaching = TeachingUiState())
+        DollyBotUiState(device = DeviceUiState(live = true), libraryLoading = true)
     )
     val state = mutableState.asStateFlow()
     private val adapter = application.getSystemService(BluetoothManager::class.java)?.adapter
-    private var link: BluetoothLink? = null
+    private var link: CarLink? = null
     private var session = 0L
     private var sequence = 0
     private var connectionJob: Job? = null
@@ -61,6 +80,9 @@ internal class DollyBotViewModel(application: Application) :
     private var lastStatusAt = 0L
     private data class Pending(val type: Int, val reply: CompletableDeferred<Packet>)
     private val pending = mutableMapOf<Int, Pending>()
+    private val storageMutex = Mutex()
+    private var finalizationJob: Job? = null
+    private var previewJob: Job? = null
 
     val hasPermission: Boolean
         get() = Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(
@@ -69,6 +91,27 @@ internal class DollyBotViewModel(application: Application) :
 
     init {
         refreshDevices()
+        viewModelScope.launch {
+            try {
+                val all = withContext(Dispatchers.IO) { store.all() }
+                val draft = all.firstOrNull { it.isDraft }
+                mutableState.update {
+                    it.copy(
+                        trajectories = all.filterNot { trajectory -> trajectory.isDraft },
+                        libraryLoading = false,
+                        recording = if (draft == null) it.recording else RecordingUiState(
+                            mode = draft.kind, stage = RecordingStage.PendingSave,
+                            draftId = draft.id, pending = draft, showSaveDialog = true
+                        )
+                    )
+                }
+            } catch (error: Exception) {
+                mutableState.update { it.copy(
+                    libraryLoading = false,
+                    recording = it.recording.copy(message = text(R.string.storage_failed))
+                ) }
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -135,12 +178,12 @@ internal class DollyBotViewModel(application: Application) :
                 teaching = TeachingUiState()
             )
         }
-        val connection = BluetoothLink(
+        val connection = createLink(
             viewModelScope,
-            receive = { packet ->
+            { packet ->
                 viewModelScope.launch { if (session == currentSession) receive(packet) }
             },
-            disconnected = { error ->
+            { error ->
                 viewModelScope.launch {
                     if (session == currentSession) connectionFailed(error.message)
                 }
@@ -256,19 +299,53 @@ internal class DollyBotViewModel(application: Application) :
         }
     }
 
-    override fun startRecording() = teachingOperation {
-        endTeaching()
-        beginTeaching(1)
+    override fun selectRecordingMode(kind: TrajectoryKind) {
+        if (state.value.libraryLoading || state.value.recording.stage !in
+            listOf(RecordingStage.Idle, RecordingStage.Ready)
+        ) return
+        mutableState.update { it.copy(recording = RecordingUiState(
+            mode = kind, stage = RecordingStage.Ready
+        )) }
     }
 
-    override fun finishRecording() = teachingOperation { endTeaching() }
+    override fun startRecording(kind: TrajectoryKind) = teachingOperation {
+        check(state.value.recording.stage == RecordingStage.Ready &&
+            state.value.recording.mode == kind && !state.value.libraryLoading
+        )
+        mutableState.update { it.copy(
+            recording = it.recording.copy(
+                stage = RecordingStage.Starting, draftId = UUID.randomUUID().toString(), message = null
+            ),
+            teaching = it.teaching.copy(
+                continuous = if (kind == TrajectoryKind.Continuous) TeachingRun() else it.teaching.continuous,
+                waypoints = if (kind == TrajectoryKind.Waypoints) TeachingRun() else it.teaching.waypoints
+            )
+        ) }
+        try {
+            beginTeaching(if (kind == TrajectoryKind.Continuous) 1 else 2)
+            mutableState.update { it.copy(recording = it.recording.copy(stage = RecordingStage.Recording)) }
+        } catch (error: Exception) {
+            // Cancellation can race with disconnect finalization; never replace its pending draft.
+            if (state.value.recording.stage == RecordingStage.Starting) {
+                if (state.value.teaching.activeMode == 0) {
+                    mutableState.update { it.copy(recording = it.recording.copy(stage = RecordingStage.Ready)) }
+                } else if (error !is CancellationException) {
+                    finalizeRecording(interrupted = true)
+                }
+            }
+            throw error
+        }
+    }
+
+    override fun finishRecording() {
+        finalizeRecording(interrupted = false)
+    }
 
     override fun captureWaypoint() = teachingOperation {
         val teaching = state.value.teaching!!
-        if (teaching.activeMode != 2) {
-            endTeaching()
-            beginTeaching(2)
-        }
+        check(teaching.activeMode == 2 &&
+            state.value.recording.stage == RecordingStage.Recording
+        ) { text(R.string.start_point_recording_first) }
         val id = state.value.teaching!!.waypoints.id
         val packet = request(Wire.TAKE_POINT, Wire.buffer(4).putInt(id.toInt()).array())
         val point = TeachingPoint.decode(packet.payload)
@@ -287,13 +364,254 @@ internal class DollyBotViewModel(application: Application) :
     }
 
     fun onBackground() {
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = it.editor?.copy(playing = false)) }
         if (state.value.device.connection != ConnectionStatus.Connected) return
         stopMotion()
+        teachingJob?.cancel()
+        finalizeRecording(interrupted = true)
         viewModelScope.launch {
-            teachingJob?.cancel()
-            runCatching { withTimeout(1000) { endTeaching(interrupted = true) } }
+            finalizationJob?.join()
             disconnect()
         }
+    }
+
+    private fun finalizeRecording(interrupted: Boolean) {
+        val recording = state.value.recording
+        if (recording.stage !in listOf(RecordingStage.Starting, RecordingStage.Recording) ||
+            finalizationJob?.isActive == true
+        ) return
+        val kind = recording.mode ?: return
+        motion = MotionInput()
+        mutableState.update { it.copy(recording = recording.copy(
+            stage = RecordingStage.Finishing, busy = true
+        )) }
+        finalizationJob = viewModelScope.launch {
+            var failed = interrupted
+            try {
+                if (state.value.device.connection == ConnectionStatus.Connected) {
+                    // Await parking before ending so an asynchronously launched STOP cannot be overtaken.
+                    request(Wire.STOP)
+                    endTeaching(interrupted)
+                } else failed = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                failed = true
+                connectionFailed(error.message)
+            }
+            if (failed) mutableState.update { it.copy(teaching = interrupted(it.teaching)) }
+            val teaching = state.value.teaching
+            val run = if (kind == TrajectoryKind.Continuous) teaching.continuous else teaching.waypoints
+            persistEndedRun(kind, recording.draftId!!, run, failed)
+        }
+    }
+
+    private suspend fun persistEndedRun(kind: TrajectoryKind, id: String, run: TeachingRun, failed: Boolean) {
+        if (run.poses.isEmpty()) {
+            mutableState.update { it.copy(recording = RecordingUiState(message = text(R.string.no_recorded_data))) }
+            return
+        }
+        val draft = SavedTrajectory.recorded(
+            kind, run.poses, run.incomplete || failed || run.phase == TeachingPhase.Interrupted, id
+        ).let {
+            it.copy(name = text(kind.label) + " " +
+                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it.createdAt)))
+        }
+        var message: String? = null
+        try {
+            storageMutex.withLock { withContext(Dispatchers.IO) { store.put(draft) } }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            message = text(R.string.storage_failed)
+        }
+        mutableState.update {
+            it.copy(recording = RecordingUiState(
+                mode = kind, stage = RecordingStage.PendingSave, draftId = id,
+                pending = draft, showSaveDialog = true, message = message
+            ))
+        }
+    }
+
+    override fun showRecordingSaveDialog() {
+        mutableState.update { it.copy(recording = it.recording.copy(showSaveDialog = true)) }
+    }
+
+    override fun dismissRecordingSaveDialog() {
+        mutableState.update { it.copy(recording = it.recording.copy(showSaveDialog = false)) }
+    }
+
+    override fun saveRecording(name: String) {
+        val recording = state.value.recording
+        val draft = recording.pending ?: return
+        if (name.trim().isEmpty() || recording.busy) return
+        mutableState.update { it.copy(recording = recording.copy(busy = true, message = null)) }
+        viewModelScope.launch {
+            try {
+                val all = storageMutex.withLock {
+                    withContext(Dispatchers.IO) {
+                        store.put(draft.copy(name = name.trim(), isDraft = false, updatedAt = System.currentTimeMillis()))
+                        store.all()
+                    }
+                }
+                mutableState.update { it.copy(
+                    trajectories = all.filterNot { trajectory -> trajectory.isDraft },
+                    recording = RecordingUiState()
+                ) }
+            } catch (error: Exception) {
+                mutableState.update { it.copy(recording = it.recording.copy(
+                    busy = false, message = text(R.string.storage_failed)
+                )) }
+            }
+        }
+    }
+
+    override fun discardRecording() {
+        val recording = state.value.recording
+        val draft = recording.pending ?: return
+        if (recording.busy) return
+        mutableState.update { it.copy(recording = recording.copy(busy = true)) }
+        viewModelScope.launch {
+            try {
+                storageMutex.withLock { withContext(Dispatchers.IO) { store.delete(draft.id) } }
+                mutableState.update { it.copy(recording = RecordingUiState()) }
+            } catch (error: Exception) {
+                mutableState.update { it.copy(recording = it.recording.copy(
+                    busy = false, message = text(R.string.storage_failed)
+                )) }
+            }
+        }
+    }
+
+    override fun openTrajectory(id: String) {
+        if (state.value.editor?.edited?.id == id) return
+        val trajectory = state.value.trajectories.firstOrNull { it.id == id } ?: return
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = TrajectoryEditorState(trajectory)) }
+    }
+
+    override fun renameEditedTrajectory(name: String) {
+        mutableState.update {
+            val editor = it.editor ?: return@update it
+            if (editor.saving) it else it.copy(editor = editor.copy(edited = editor.edited.copy(name = name)))
+        }
+    }
+
+    override fun selectEditedPoint(id: String) {
+        mutableState.update { it.copy(editor = it.editor?.copy(selectedPointId = id)) }
+    }
+
+    override fun moveEditedPoint(delta: Int) {
+        val editor = state.value.editor ?: return
+        if (editor.saving || editor.edited.kind != TrajectoryKind.Waypoints) return
+        val index = editor.edited.points.indexOfFirst { it.id == editor.selectedPointId }
+        val target = index + delta
+        if (index < 0 || target !in editor.edited.points.indices || delta !in listOf(-1, 1)) return
+        val points = editor.edited.points.toMutableList()
+        val point = points.removeAt(index)
+        points.add(target, point)
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = editor.copy(
+            edited = editor.edited.copy(points = points), playing = false, elapsedMs = 0
+        )) }
+    }
+
+    override fun deleteEditedPoint() {
+        val editor = state.value.editor ?: return
+        if (editor.saving || editor.edited.kind != TrajectoryKind.Waypoints) return
+        val index = editor.edited.points.indexOfFirst { it.id == editor.selectedPointId }
+        if (index < 0) return
+        val points = editor.edited.points.filterNot { it.id == editor.selectedPointId }
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = editor.copy(
+            edited = editor.edited.copy(points = points),
+            selectedPointId = points.getOrNull(index.coerceAtMost(points.lastIndex))?.id,
+            playing = false, elapsedMs = 0
+        )) }
+    }
+
+    override fun saveEditedTrajectory(closeAfter: Boolean) {
+        val editor = state.value.editor ?: return
+        if (editor.saving || editor.edited.name.trim().isEmpty() || editor.edited.points.isEmpty()) return
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = editor.copy(saving = true, playing = false, message = null)) }
+        viewModelScope.launch {
+            try {
+                val saved = editor.edited.copy(name = editor.edited.name.trim(), updatedAt = System.currentTimeMillis())
+                val all = storageMutex.withLock { withContext(Dispatchers.IO) {
+                    store.put(saved)
+                    store.all()
+                } }
+                mutableState.update { it.copy(
+                    trajectories = all.filterNot { trajectory -> trajectory.isDraft },
+                    editor = if (closeAfter) null else TrajectoryEditorState(
+                        saved, selectedPointId = editor.selectedPointId
+                    )
+                ) }
+            } catch (error: Exception) {
+                mutableState.update { it.copy(editor = it.editor?.copy(
+                    saving = false, message = text(R.string.storage_failed)
+                )) }
+            }
+        }
+    }
+
+    override fun closeEditor() {
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = null) }
+    }
+
+    override fun deleteTrajectory(id: String) {
+        val editor = state.value.editor ?: return
+        if (editor.saving || editor.edited.id != id) return
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = editor.copy(saving = true, playing = false)) }
+        viewModelScope.launch {
+            try {
+                val all = storageMutex.withLock { withContext(Dispatchers.IO) {
+                    store.delete(id)
+                    store.all()
+                } }
+                mutableState.update { it.copy(
+                    trajectories = all.filterNot { trajectory -> trajectory.isDraft }, editor = null
+                ) }
+            } catch (error: Exception) {
+                mutableState.update { it.copy(editor = it.editor?.copy(
+                    saving = false, message = text(R.string.storage_failed)
+                )) }
+            }
+        }
+    }
+
+    override fun togglePreview() {
+        val editor = state.value.editor ?: return
+        if (editor.saving) return
+        previewJob?.cancel()
+        if (editor.playing) {
+            mutableState.update { it.copy(editor = editor.copy(playing = false)) }
+            return
+        }
+        val timeline = PreviewTimeline(editor.edited)
+        if (timeline.durationMs <= 0) return
+        val initial = if (editor.elapsedMs >= timeline.durationMs) 0 else editor.elapsedMs
+        mutableState.update { it.copy(editor = editor.copy(playing = true, elapsedMs = initial)) }
+        previewJob = viewModelScope.launch {
+            val started = SystemClock.elapsedRealtime()
+            while (true) {
+                val elapsed = (initial + SystemClock.elapsedRealtime() - started).coerceAtMost(timeline.durationMs)
+                mutableState.update { it.copy(editor = it.editor?.copy(
+                    elapsedMs = elapsed, playing = elapsed < timeline.durationMs
+                )) }
+                if (elapsed >= timeline.durationMs) break
+                delay(16)
+            }
+        }
+    }
+
+    override fun resetPreview() {
+        previewJob?.cancel()
+        mutableState.update { it.copy(editor = it.editor?.copy(playing = false, elapsedMs = 0)) }
     }
 
     private fun teachingOperation(operation: suspend () -> Unit) {
@@ -404,6 +722,9 @@ internal class DollyBotViewModel(application: Application) :
                             teaching = teaching.copy(pose = status.pose)
                         )
                     }
+                    if (status.mode == 0 && endingTeachId == null &&
+                        state.value.recording.stage == RecordingStage.Recording
+                    ) finalizeRecording(interrupted = true)
                 }
                 Wire.ACK, Wire.POINT -> {
                     val expected = pending[packet.seq] ?: return
@@ -491,6 +812,7 @@ internal class DollyBotViewModel(application: Application) :
         pending.clear()
         motion = MotionInput()
         mutableState.update { it.copy(teaching = interrupted(it.teaching!!).copy(busy = false)) }
+        finalizeRecording(interrupted = true)
     }
 
     private fun connectionFailed(message: String?) {
@@ -512,6 +834,7 @@ internal class DollyBotViewModel(application: Application) :
 
     override fun onCleared() {
         link?.close()
+        store.close()
         super.onCleared()
     }
 }

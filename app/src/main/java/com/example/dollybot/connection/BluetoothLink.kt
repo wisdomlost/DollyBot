@@ -14,11 +14,17 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 
 /** One reader and one frame writer per RFCOMM connection. */
+internal interface CarLink {
+    suspend fun connect(device: BluetoothDevice)
+    fun send(packet: Packet)
+    fun close()
+}
+
 internal class BluetoothLink(
     private val scope: CoroutineScope,
     private val receive: (Packet) -> Unit,
     private val disconnected: (Throwable) -> Unit
-) {
+) : CarLink {
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var closed = false
     private val urgent = Channel<Packet>(Channel.UNLIMITED)
@@ -29,7 +35,7 @@ internal class BluetoothLink(
     private var writer: Job? = null
 
     @SuppressLint("MissingPermission")
-    suspend fun connect(device: BluetoothDevice) = withContext(Dispatchers.IO) {
+    override suspend fun connect(device: BluetoothDevice) = withContext(Dispatchers.IO) {
         val connection = device.createRfcommSocketToServiceRecord(
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         )
@@ -73,7 +79,7 @@ internal class BluetoothLink(
         }
     }
 
-    fun send(packet: Packet) {
+    override fun send(packet: Packet) {
         if (closed) return
         when (packet.type) {
             Wire.STOP -> {
@@ -86,7 +92,7 @@ internal class BluetoothLink(
         }
     }
 
-    fun close() {
+    override fun close() {
         closed = true
         runCatching { socket?.close() }
         reader?.cancel()
