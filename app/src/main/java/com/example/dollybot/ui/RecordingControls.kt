@@ -32,6 +32,14 @@ internal fun RecordingFooter(state: DollyBotUiState, actions: DollyBotActions, o
     val ready = state.device.connection == ConnectionStatus.Connected && state.device.calibrated && !busy
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            if (recording.mode == RecordingMode.Push) {
+                Text(
+                    stringResource(if (recording.stage == RecordingStage.Starting) {
+                        R.string.waiting_for_car_confirmation
+                    } else R.string.push_recording),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             if (recording.message != null) {
                 Text(recording.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
@@ -59,7 +67,7 @@ internal fun RecordingFooter(state: DollyBotUiState, actions: DollyBotActions, o
                             Modifier.weight(1f),
                             enabled = ready && recording.stage == RecordingStage.Ready
                         )
-                        if (recording.mode == TrajectoryKind.Waypoints) {
+                        if (recording.mode == RecordingMode.Waypoints) {
                             PlaceholderButton(
                                 stringResource(R.string.capture_waypoint),
                                 actions::captureWaypoint, Modifier.weight(1f),
@@ -85,13 +93,19 @@ internal fun RecordingFooter(state: DollyBotUiState, actions: DollyBotActions, o
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     NavigationRow(stringResource(R.string.continuous_recording), onClick = {
-                        actions.selectRecordingMode(TrajectoryKind.Continuous)
+                        actions.selectRecordingMode(RecordingMode.Continuous)
                         chooseMode = false
                     })
                     NavigationRow(stringResource(R.string.capture_waypoint), onClick = {
-                        actions.selectRecordingMode(TrajectoryKind.Waypoints)
+                        actions.selectRecordingMode(RecordingMode.Waypoints)
                         chooseMode = false
                     })
+                    NavigationRow(stringResource(R.string.push_mode), enabled = ready, onClick = {
+                        actions.selectRecordingMode(RecordingMode.Push)
+                        chooseMode = false
+                    })
+                    if (!ready) Text(stringResource(R.string.push_requires_connection),
+                        style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {},

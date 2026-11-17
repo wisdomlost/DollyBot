@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,9 +86,12 @@ internal fun ControlScreen(
         ),
         isError = state.device.connection == ConnectionStatus.Error
     )
-    if (state.teaching?.activeMode == 1) {
+    val drivingEnabled = !state.recording.blocksDriving
+    if (state.teaching.activeMode == 1 || state.teaching.activeMode == 3) {
         NavigationRow(
-            stringResource(R.string.recording) + " · " + state.teaching.continuous.seconds + " s",
+            stringResource(if (state.teaching.activeMode == 3) R.string.push_recording else R.string.recording) +
+                " · " + state.teaching.continuous.seconds + " s · " +
+                stringResource(R.string.sample_count, state.teaching.continuous.poses.size),
             onContinuousTeaching
         )
     }
@@ -117,7 +122,7 @@ internal fun ControlScreen(
                     ),
                     onPositionChange = { onMove(it.x, it.y) },
                     onRelease = { onMove(0f, 0f) },
-                    modifier = Modifier.testTag("drive_joystick")
+                    modifier = Modifier.testTag("drive_joystick"), enabled = drivingEnabled
                 )
                 Text(
                     stringResource(R.string.drive_joystick_hint),
@@ -137,12 +142,14 @@ internal fun ControlScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     RotationButton(
                         label = stringResource(R.string.turn_left),
+                        enabled = drivingEnabled,
                         gestureSession = gestureSession,
                         onPressedChange = { onRotate(DriveDirection.TurnLeft, it) },
                         modifier = Modifier.weight(1f)
                     )
                     RotationButton(
                         label = stringResource(R.string.turn_right),
+                        enabled = drivingEnabled,
                         gestureSession = gestureSession,
                         onPressedChange = { onRotate(DriveDirection.TurnRight, it) },
                         modifier = Modifier.weight(1f)
@@ -258,13 +265,14 @@ private fun RotationButton(
     label: String,
     gestureSession: Int,
     onPressedChange: (Boolean) -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    enabled: Boolean = true
 ) {
     val colors = MaterialTheme.colorScheme
     var pressed by remember(gestureSession) { mutableStateOf(false) }
     val changePressed by rememberUpdatedState(onPressedChange)
     Surface(
-        modifier = modifier,
+        modifier = modifier.alpha(if (enabled) 1f else 0.38f),
         shape = MaterialTheme.shapes.medium,
         color = if (pressed) colors.primary else colors.secondaryContainer,
         contentColor = if (pressed) colors.onPrimary else colors.onSecondaryContainer
@@ -274,14 +282,17 @@ private fun RotationButton(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .semantics(mergeDescendants = true) {
+                    if (!enabled) disabled()
                     role = Role.Button
                     onClick {
+                        if (!enabled) return@onClick false
                         changePressed(true)
                         changePressed(false)
                         true
                     }
                 }
                 .onKeyEvent { event ->
+                    if (!enabled) return@onKeyEvent false
                     if (event.key != Key.Enter && event.key != Key.NumPadEnter &&
                         event.key != Key.Spacebar
                     ) return@onKeyEvent false
@@ -289,8 +300,9 @@ private fun RotationButton(
                     changePressed(pressed)
                     true
                 }
-                .focusable()
-                .pointerInput(gestureSession) {
+                .focusable(enabled)
+                .pointerInput(gestureSession, enabled) {
+                    if (!enabled) return@pointerInput
                     detectTapGestures(
                         onPress = {
                             pressed = true

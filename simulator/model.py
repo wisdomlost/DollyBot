@@ -19,6 +19,28 @@ class Pose:
     gimbal_pitch: int
 
 
+class StatusSchedule:
+    """Monotonic periodic deadlines; a delayed tick skips missed samples."""
+
+    def __init__(self, interval_ms=50):
+        if not isinstance(interval_ms, int) or not 20 <= interval_ms <= 1000:
+            raise ValueError("上报周期必须为 20–1000 ms 的整数")
+        self.interval = interval_ms / 1000.0
+        self.next_due = 0.0
+
+    def reset(self, now):
+        self.next_due = now + self.interval
+
+    def due(self, now):
+        if now < self.next_due:
+            return False
+        skipped = math.floor((now - self.next_due) / self.interval) + 1
+        self.next_due += skipped * self.interval
+        if self.next_due <= now:  # Float rounding must not cause a second sample at the same tick.
+            self.next_due = now + self.interval
+        return True
+
+
 class Simulator:
     def __init__(self):
         self.session = 0
@@ -37,7 +59,10 @@ class Simulator:
         self.mode = 0
         self.teach_id = 0
         self.index = 0
-        self.histories = {1: [], 2: []}
+        self.histories = {1: [], 2: [], 3: []}
+        self.push_started_at = 0.0
+        self.push_origin = (0.0, 0.0, 0.0, 0, 0)
+        self.push_gimbal_manual = False
         self.interrupted = False
         self.status_seq = 0
         self.cache = OrderedDict()
@@ -45,6 +70,20 @@ class Simulator:
     def advance(self, now: float):
         if now < self.now:
             raise ValueError("Simulation time must be monotonic")
+        if self.mode == 3:
+            # An external push is independent of motor commands and sampling frequency.
+            until = min(now, self.last_contact + 3.0) if self.connected else now
+            elapsed = max(0.0, until - self.push_started_at)
+            x, y, yaw, gimbal_yaw, gimbal_pitch = self.push_origin
+            theta, origin_yaw = math.radians(elapsed * 20), math.radians(yaw)
+            local_x, local_y = 500 * (1 - math.cos(theta)), 500 * math.sin(theta)
+            self.x = x + local_x * math.cos(origin_yaw) + local_y * math.sin(origin_yaw)
+            self.y = y - local_x * math.sin(origin_yaw) + local_y * math.cos(origin_yaw)
+            self.yaw = (yaw + elapsed * 20 + 180) % 360 - 180
+            if not self.push_gimbal_manual:
+                wave = math.sin(2 * math.pi * elapsed / 10)
+                self.gimbal_yaw = round(max(-18000, min(18000, gimbal_yaw + 3000 * wave)))
+                self.gimbal_pitch = round(max(-18000, min(18000, gimbal_pitch + 1500 * wave)))
         motion_end = min(now, self.last_motion + 0.3)
         remaining = max(0.0, motion_end - self.now)
         strafe, forward, rotation = self.motion
@@ -78,9 +117,9 @@ class Simulator:
 
     def status(self, sample=True) -> p.Packet:
         pose = self.pose()
-        if self.mode == 1 and sample:
+        if self.mode in (1, 3) and sample:
             self.index += 1
-            self.histories[1].append(pose)
+            self.histories[self.mode].append(pose)
         self.status_seq = (self.status_seq + 1) & 0xFFFF
         flags = int(self.calibrated) | (int(self.motion_timeout) << 1)
         data = p.STATUS_DATA.pack(
@@ -138,6 +177,8 @@ class Simulator:
             motion = struct.unpack("<hhh", data)
             if any(abs(value) > 1000 for value in motion):
                 raise ValueError("Motion out of range")
+            if self.mode == 3:
+                return [self._ack(request, p.BAD_STATE)]
             self.motion = motion
             self.last_motion = self.now
             self.last_motion_seq = request.seq
@@ -148,6 +189,8 @@ class Simulator:
             if abs(yaw) > 18000 or abs(pitch) > 18000:
                 raise ValueError("Gimbal out of range")
             self.gimbal_yaw, self.gimbal_pitch = yaw, pitch
+            if self.mode == 3:
+                self.push_gimbal_manual = True
             return []
         if kind == p.STOP:
             self.motion = (0, 0, 0)
@@ -159,11 +202,11 @@ class Simulator:
             self.x = self.y = self.yaw = 0.0
             self.frame_id = (self.frame_id + 1) & 0xFFFFFFFF or 1
             self.calibrated = True
-            self.histories = {1: [], 2: []}
+            self.histories = {1: [], 2: [], 3: []}
             return [self._ack(request, value=self.frame_id), self.status(sample=False)]
         if kind == p.TEACH_BEGIN:
             mode, frame_id = struct.unpack("<BI", data)
-            if mode not in (1, 2):
+            if mode not in (1, 2, 3):
                 raise ValueError("Unknown mode")
             if not self.calibrated:
                 return [self._ack(request, p.NOT_CALIBRATED)]
@@ -176,13 +219,19 @@ class Simulator:
             self.index = 0
             self.interrupted = False
             self.histories[mode] = []
+            if mode == 3:
+                self.motion = (0, 0, 0)
+                self.motion_timeout = False
+                self.push_started_at = self.now
+                self.push_origin = (self.x, self.y, self.yaw, self.gimbal_yaw, self.gimbal_pitch)
+                self.push_gimbal_manual = False
             return [self._ack(request, value=self.teach_id), self.status()]
         if kind in (p.TEACH_END, p.TAKE_POINT):
             teach_id, = struct.unpack("<I", data)
             if not self.mode or teach_id != self.teach_id:
                 return [self._ack(request, p.BAD_STATE)]
             if kind == p.TEACH_END:
-                replies = [self.status()] if self.mode == 1 else []
+                replies = [self.status()] if self.mode in (1, 3) else []
                 self.mode = 0
                 return replies + [self._ack(request, value=self.index)]
             if self.mode != 2:

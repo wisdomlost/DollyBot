@@ -152,6 +152,7 @@ internal fun TeachingScreen(
                     Text(stringResource(R.string.waypoint_count, run.poses.size))
                 } else {
                     InfoRow(stringResource(R.string.recording_duration), formatPreviewTime(run.seconds * 1000L))
+                    InfoRow(stringResource(R.string.recorded_samples), run.poses.size.toString())
                 }
             }
         }

@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.dollybot.ui.*
@@ -23,13 +25,13 @@ class RecordingControlsTest {
         device = DeviceUiState(connection = ConnectionStatus.Connected, calibrated = true)
     ))
     private val spy = object : DollyBotActions {
-        var selected: TrajectoryKind? = null
-        var started: TrajectoryKind? = null
+        var selected: RecordingMode? = null
+        var started: RecordingMode? = null
         var captures = 0
         var finishes = 0
         var stops = 0
-        override fun selectRecordingMode(kind: TrajectoryKind) { selected = kind }
-        override fun startRecording(kind: TrajectoryKind) { started = kind }
+        override fun selectRecordingMode(mode: RecordingMode) { selected = mode }
+        override fun startRecording(mode: RecordingMode) { started = mode }
         override fun captureWaypoint() { captures++ }
         override fun finishRecording() { finishes++ }
         override fun stopMotion() { stops++ }
@@ -49,7 +51,7 @@ class RecordingControlsTest {
         compose.onNodeWithText("录制").performClick()
         compose.onNodeWithText("取点").performClick()
         compose.runOnIdle {
-            assertEquals(TrajectoryKind.Waypoints, spy.selected)
+            assertEquals(RecordingMode.Waypoints, spy.selected)
             assertNull(spy.started)
             snapshot.value = snapshot.value.copy(recording = RecordingUiState(
                 mode = spy.selected, stage = RecordingStage.Ready
@@ -59,7 +61,7 @@ class RecordingControlsTest {
         compose.onNodeWithText("停止").assertIsNotEnabled()
         compose.onNodeWithText("开始").assertIsEnabled().performClick()
         compose.runOnIdle {
-            assertEquals(TrajectoryKind.Waypoints, spy.started)
+            assertEquals(RecordingMode.Waypoints, spy.started)
             snapshot.value = snapshot.value.copy(recording = snapshot.value.recording.copy(
                 stage = RecordingStage.Recording
             ))
@@ -87,5 +89,37 @@ class RecordingControlsTest {
         compose.onNodeWithText("开始").assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithText("停止").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithText("取点").assertDoesNotExist()
+    }
+
+    @Test
+    fun pushSelectionAndWaitingStateDisableDrivingButKeepGimbalAvailable() {
+        show()
+        compose.onNodeWithText("录制").performClick()
+        compose.onNodeWithText("推车").assertIsEnabled().performClick()
+        compose.runOnIdle {
+            assertEquals(RecordingMode.Push, spy.selected)
+            snapshot.value = snapshot.value.copy(recording = RecordingUiState(
+                mode = RecordingMode.Push, stage = RecordingStage.Starting
+            ))
+        }
+        compose.onNodeWithText("等待车端确认").assertIsDisplayed()
+        compose.onNodeWithTag("drive_joystick").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("云台摇杆").assertIsEnabled()
+        compose.onNodeWithText("停止").assertIsNotEnabled()
+        compose.runOnIdle {
+            snapshot.value = snapshot.value.copy(recording = snapshot.value.recording.copy(
+                stage = RecordingStage.Recording
+            ))
+        }
+        compose.onNodeWithText("停止").assertIsEnabled()
+        compose.onNodeWithText("取点").assertDoesNotExist()
+    }
+
+    @Test
+    fun pushRequiresConnectedCalibratedDevice() {
+        snapshot.value = snapshot.value.copy(device = DeviceUiState())
+        show()
+        compose.onNodeWithText("录制").performClick()
+        compose.onNodeWithText("推车").assertIsNotEnabled()
     }
 }

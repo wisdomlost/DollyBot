@@ -25,6 +25,7 @@ import com.example.dollybot.ui.TeachingRun
 import com.example.dollybot.ui.TeachingUiState
 import com.example.dollybot.ui.TrajectoryKind
 import com.example.dollybot.ui.RecordingStage
+import com.example.dollybot.ui.RecordingMode
 import com.example.dollybot.ui.RecordingUiState
 import com.example.dollybot.trajectory.SavedTrajectory
 import com.example.dollybot.trajectory.TrajectoryEditorState
@@ -83,6 +84,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     private val storageMutex = Mutex()
     private var finalizationJob: Job? = null
     private var previewJob: Job? = null
+    private var pushSession: PushRecordingSession? = null
 
     val hasPermission: Boolean
         get() = Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(
@@ -100,7 +102,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                         trajectories = all.filterNot { trajectory -> trajectory.isDraft },
                         libraryLoading = false,
                         recording = if (draft == null) it.recording else RecordingUiState(
-                            mode = draft.kind, stage = RecordingStage.PendingSave,
+                            mode = RecordingMode.fromKind(draft.kind), stage = RecordingStage.PendingSave,
                             draftId = draft.id, pending = draft, showSaveDialog = true
                         )
                     )
@@ -248,6 +250,10 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     override fun move(input: MotionInput) {
+        if (state.value.recording.blocksDriving) {
+            motion = MotionInput()
+            return
+        }
         motion = input.copy(
             strafe = input.strafe.coerceIn(-1f, 1f),
             forward = input.forward.coerceIn(-1f, 1f),
@@ -299,19 +305,25 @@ internal class DollyBotViewModel @JvmOverloads constructor(
         }
     }
 
-    override fun selectRecordingMode(kind: TrajectoryKind) {
+    override fun selectRecordingMode(mode: RecordingMode) {
         if (state.value.libraryLoading || state.value.recording.stage !in
             listOf(RecordingStage.Idle, RecordingStage.Ready)
         ) return
+        if (mode == RecordingMode.Push && (state.value.device.connection != ConnectionStatus.Connected ||
+                !state.value.device.calibrated || state.value.teaching.busy)) return
         mutableState.update { it.copy(recording = RecordingUiState(
-            mode = kind, stage = RecordingStage.Ready
+            mode = mode, stage = RecordingStage.Ready
         )) }
+        if (mode == RecordingMode.Push) startRecording(mode)
     }
 
-    override fun startRecording(kind: TrajectoryKind) = teachingOperation {
+    override fun startRecording(mode: RecordingMode) = teachingOperation {
         check(state.value.recording.stage == RecordingStage.Ready &&
-            state.value.recording.mode == kind && !state.value.libraryLoading
+            state.value.recording.mode == mode && !state.value.libraryLoading
         )
+        val kind = mode.kind
+        if (mode == RecordingMode.Push) motion = MotionInput()
+        pushSession = null
         mutableState.update { it.copy(
             recording = it.recording.copy(
                 stage = RecordingStage.Starting, draftId = UUID.randomUUID().toString(), message = null
@@ -322,13 +334,21 @@ internal class DollyBotViewModel @JvmOverloads constructor(
             )
         ) }
         try {
-            beginTeaching(if (kind == TrajectoryKind.Continuous) 1 else 2)
+            if (mode == RecordingMode.Push) request(Wire.STOP)
+            beginTeaching(mode.wireMode)
             mutableState.update { it.copy(recording = it.recording.copy(stage = RecordingStage.Recording)) }
+            if (pushSession?.frameChanged == true) finalizeRecording(interrupted = true)
         } catch (error: Exception) {
+            if (mode == RecordingMode.Push && error is IOException) {
+                connectionFailed(error.message)
+            }
             // Cancellation can race with disconnect finalization; never replace its pending draft.
             if (state.value.recording.stage == RecordingStage.Starting) {
                 if (state.value.teaching.activeMode == 0) {
-                    mutableState.update { it.copy(recording = it.recording.copy(stage = RecordingStage.Ready)) }
+                    pushSession = null
+                    mutableState.update { it.copy(recording = it.recording.copy(
+                        stage = RecordingStage.Ready, message = error.message
+                    )) }
                 } else if (error !is CancellationException) {
                     finalizeRecording(interrupted = true)
                 }
@@ -381,7 +401,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
         if (recording.stage !in listOf(RecordingStage.Starting, RecordingStage.Recording) ||
             finalizationJob?.isActive == true
         ) return
-        val kind = recording.mode ?: return
+        val mode = recording.mode ?: return
+        val kind = mode.kind
         motion = MotionInput()
         mutableState.update { it.copy(recording = recording.copy(
             stage = RecordingStage.Finishing, busy = true
@@ -403,6 +424,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
             if (failed) mutableState.update { it.copy(teaching = interrupted(it.teaching)) }
             val teaching = state.value.teaching
             val run = if (kind == TrajectoryKind.Continuous) teaching.continuous else teaching.waypoints
+            pushSession = null
             persistEndedRun(kind, recording.draftId!!, run, failed)
         }
     }
@@ -428,7 +450,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
         }
         mutableState.update {
             it.copy(recording = RecordingUiState(
-                mode = kind, stage = RecordingStage.PendingSave, draftId = id,
+                mode = it.recording.mode ?: RecordingMode.fromKind(kind),
+                stage = RecordingStage.PendingSave, draftId = id,
                 pending = draft, showSaveDialog = true, message = message
             ))
         }
@@ -638,24 +661,31 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     private suspend fun beginTeaching(mode: Int) {
         val current = state.value.teaching!!
         check(state.value.device.calibrated && current.pose != null) { text(R.string.calibrate_first) }
+        val pushing = if (mode == 3) PushRecordingSession(current.pose.frameId).also { pushSession = it } else null
         val reply = request(
             Wire.TEACH_BEGIN,
             Wire.buffer(5).put(mode.toByte()).putInt(current.pose.frameId.toInt()).array()
         )
-        ensureRun(mode, ackValue(reply))
+        if (pushing != null) {
+            pushing.confirm(ackValue(reply))
+            mutableState.update { it.copy(teaching = it.teaching.copy(
+                continuous = pushing.run, activeMode = 3
+            )) }
+        } else ensureRun(mode, ackValue(reply))
     }
 
     private suspend fun endTeaching(interrupted: Boolean = false) {
         val current = state.value.teaching!!
         val mode = current.activeMode
         if (mode == 0) return
-        val run = if (mode == 1) current.continuous else current.waypoints
+        val continuous = mode == 1 || mode == 3
+        val run = if (continuous) current.continuous else current.waypoints
         endingTeachId = run.id
         try {
             val expected = ackValue(request(Wire.TEACH_END, Wire.buffer(4).putInt(run.id.toInt()).array()))
             mutableState.update {
                 val latest = it.teaching!!
-                val completed = if (mode == 1) latest.continuous else latest.waypoints
+                val completed = if (continuous) latest.continuous else latest.waypoints
                 val incomplete = completed.incomplete || expected != completed.poses.size.toLong()
                 val result = completed.copy(
                     phase = if (interrupted || incomplete) TeachingPhase.Interrupted else TeachingPhase.Finished,
@@ -663,7 +693,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                 )
                 it.copy(teaching = latest.copy(
                     activeMode = 0,
-                    continuous = if (mode == 1) result else latest.continuous,
+                    continuous = if (continuous) result else latest.continuous,
                     waypoints = if (mode == 2) result else latest.waypoints,
                     message = if (incomplete) text(R.string.sample_count_mismatch) else latest.message
                 ))
@@ -694,16 +724,29 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                 Wire.STATUS -> {
                     val status = CarStatus.decode(packet.payload)
                     lastStatusAt = SystemClock.elapsedRealtime()
-                    if (!gimbalInitialized) {
+                    if (!gimbalInitialized || (state.value.recording.blocksDriving && !gimbalDirty)) {
                         yaw = status.pose.gimbalYaw
                         pitch = status.pose.gimbalPitch
                         gimbalInitialized = true
                         mutableState.update { it.copy(yawDegrees = yaw, pitchDegrees = pitch) }
                     }
-                    if (status.mode in 1..2) ensureRun(status.mode, status.teachId)
+                    val pushing = pushSession
+                    val pushRecording = state.value.recording.blocksDriving
+                    if (pushRecording) {
+                        pushing?.receive(status)
+                        if (pushing?.confirmed == true && status.mode == 0 &&
+                            status.pose.frameId != pushing.frameId
+                        ) pushing.interruptForFrameChange()
+                    } else if (status.mode in 1..2) ensureRun(status.mode, status.teachId)
+                    val unexpectedIdle = status.mode == 0 && endingTeachId == null &&
+                        (!pushRecording || (pushing?.confirmed == true && status.teachId == pushing.run.id))
                     mutableState.update {
                         var teaching = it.teaching!!
-                        if (status.mode == 1) {
+                        if (pushRecording && pushing?.confirmed == true &&
+                            (status.mode == 3 || pushing.frameChanged)
+                        ) {
+                            teaching = teaching.copy(continuous = pushing.run)
+                        } else if (!pushRecording && status.mode == 1) {
                             val run = teaching.continuous
                             if (status.pointIndex > run.lastIndex) {
                                 teaching = teaching.copy(continuous = run.copy(
@@ -712,9 +755,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                                     lastIndex = status.pointIndex
                                 ))
                             }
-                        } else if (status.mode == 0 && teaching.activeMode != 0 &&
-                            endingTeachId == null
-                        ) {
+                        }
+                        if (unexpectedIdle && teaching.activeMode != 0) {
                             teaching = interrupted(teaching)
                         }
                         it.copy(
@@ -722,7 +764,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                             teaching = teaching.copy(pose = status.pose)
                         )
                     }
-                    if (status.mode == 0 && endingTeachId == null &&
+                    if ((unexpectedIdle || (pushRecording && pushing?.frameChanged == true)) &&
+                        endingTeachId == null &&
                         state.value.recording.stage == RecordingStage.Recording
                     ) finalizeRecording(interrupted = true)
                 }
@@ -779,6 +822,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     private fun sendMotion() {
+        if (state.value.recording.blocksDriving) return
         val data = Wire.buffer(6)
             .putShort((motion.strafe * 1000).roundToInt().toShort())
             .putShort((motion.forward * 1000).roundToInt().toShort())

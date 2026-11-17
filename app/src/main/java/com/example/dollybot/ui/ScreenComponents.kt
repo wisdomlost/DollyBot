@@ -138,9 +138,12 @@ internal fun PlaceholderButton(
 }
 
 @Composable
-internal fun NavigationRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun NavigationRow(
+    label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true
+) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface

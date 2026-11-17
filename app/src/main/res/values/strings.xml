@@ -145,6 +145,12 @@
     <string name="start">开始</string>
     <string name="record">录制</string>
     <string name="continuous_recording">连续录制</string>
+    <string name="push_mode">推车</string>
+    <string name="push_recording">推车录制</string>
+    <string name="waiting_for_car_confirmation">等待车端确认</string>
+    <string name="push_requires_connection">推车模式需要先连接并校准设备</string>
+    <string name="sample_count">%1$d 个采样</string>
+    <string name="recorded_samples">采样数</string>
     <string name="continuous_trajectories">连续轨迹</string>
     <string name="point_trajectories">点轨迹</string>
     <string name="example_library">示例轨迹库</string>

@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.dollybot.connection.DollyBotViewModel
 import com.example.dollybot.ui.DollyBotActions
 import com.example.dollybot.ui.DollyBotApp
+import com.example.dollybot.ui.RecordingMode
 import com.example.dollybot.ui.theme.DollybotTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +39,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val actions = object : DollyBotActions by session {
+            // Keep mode entry points explicit so their signatures cannot silently fall back to no-op defaults.
+            override fun selectRecordingMode(mode: RecordingMode) = session.selectRecordingMode(mode)
+            override fun startRecording(mode: RecordingMode) = session.startRecording(mode)
             override fun refreshDevices() = withBluetoothPermission { session.refreshDevices() }
             @SuppressLint("MissingPermission")
             override fun connect() = withBluetoothPermission {

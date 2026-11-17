@@ -62,19 +62,34 @@ internal enum class TrajectoryKind(@param:StringRes val label: Int) {
     Continuous(R.string.continuous_trajectories)
 }
 
+internal enum class RecordingMode(val wireMode: Int, val kind: TrajectoryKind) {
+    Continuous(1, TrajectoryKind.Continuous),
+    Waypoints(2, TrajectoryKind.Waypoints),
+    Push(3, TrajectoryKind.Continuous);
+
+    companion object {
+        fun fromKind(kind: TrajectoryKind) = if (kind == TrajectoryKind.Waypoints) Waypoints else Continuous
+    }
+}
+
 internal enum class RecordingStage {
     Idle, Ready, Starting, Recording, Finishing, PendingSave
 }
 
 internal data class RecordingUiState(
-    val mode: TrajectoryKind? = null,
+    val mode: RecordingMode? = null,
     val stage: RecordingStage = RecordingStage.Idle,
     val draftId: String? = null,
     val pending: SavedTrajectory? = null,
     val showSaveDialog: Boolean = false,
     val busy: Boolean = false,
     val message: String? = null
-)
+) {
+    val blocksDriving: Boolean
+        get() = mode == RecordingMode.Push && stage in listOf(
+            RecordingStage.Starting, RecordingStage.Recording, RecordingStage.Finishing
+        )
+}
 
 internal data class DollyBotUiState(
     val device: DeviceUiState = DeviceUiState(),
@@ -109,8 +124,8 @@ internal interface DollyBotActions {
     fun drive(direction: DriveDirection) = Unit
     fun move(input: MotionInput) = Unit
     fun adjustGimbal(axis: GimbalAxis, degrees: Float) = Unit
-    fun selectRecordingMode(kind: TrajectoryKind) = Unit
-    fun startRecording(kind: TrajectoryKind) = Unit
+    fun selectRecordingMode(mode: RecordingMode) = Unit
+    fun startRecording(mode: RecordingMode) = Unit
     fun finishRecording() = Unit
     fun captureWaypoint() = Unit
     fun showRecordingSaveDialog() = Unit

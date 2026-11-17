@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
@@ -22,6 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -36,7 +38,8 @@ internal fun ControlJoystick(
     positionDescription: String,
     onPositionChange: (Offset) -> Unit,
     onRelease: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     val colors = MaterialTheme.colorScheme
     val currentPosition by rememberUpdatedState(position)
@@ -52,11 +55,13 @@ internal fun ControlJoystick(
 
     Canvas(
         modifier = modifier
+            .alpha(if (enabled) 1f else 0.38f)
             .size(144.dp)
             .semantics {
+                if (!enabled) disabled()
                 contentDescription = description
                 stateDescription = positionDescription
-                customActions = directions.map { (label, step) ->
+                customActions = if (!enabled) emptyList() else directions.map { (label, step) ->
                     CustomAccessibilityAction(label) {
                         val next = if (step == Offset.Zero) Offset.Zero else currentPosition + step
                         changePosition(next.insideUnitCircle())
@@ -66,6 +71,7 @@ internal fun ControlJoystick(
                 }
             }
             .onKeyEvent { event ->
+                if (!enabled) return@onKeyEvent false
                 val step = when (event.key) {
                     Key.DirectionLeft -> Offset(-0.1f, 0f)
                     Key.DirectionRight -> Offset(0.1f, 0f)
@@ -80,8 +86,9 @@ internal fun ControlJoystick(
                 }
                 true
             }
-            .focusable()
-            .pointerInput(gestureSession) {
+            .focusable(enabled)
+            .pointerInput(gestureSession, enabled) {
+                if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()

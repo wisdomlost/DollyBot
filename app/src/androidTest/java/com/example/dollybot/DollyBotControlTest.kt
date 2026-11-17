@@ -21,7 +21,7 @@ import com.example.dollybot.ui.NoOpDollyBotActions
 import com.example.dollybot.ui.DollyBotUiState
 import com.example.dollybot.ui.RecordingUiState
 import com.example.dollybot.ui.RecordingStage
-import com.example.dollybot.ui.TrajectoryKind
+import com.example.dollybot.ui.RecordingMode
 import com.example.dollybot.ui.theme.DollybotTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -41,7 +41,7 @@ class DollyBotControlTest {
                 DollybotTheme {
                     DollyBotApp(
                         state = DollyBotUiState(recording = RecordingUiState(
-                            mode = TrajectoryKind.Continuous, stage = RecordingStage.Recording
+                            mode = RecordingMode.Continuous, stage = RecordingStage.Recording
                         )),
                         actions = actions
                     )

@@ -41,6 +41,25 @@ class ProtocolTest {
     }
 
     @Test
+    fun pushVectorsMatchPythonAndKeepFullPoseFields() {
+        val begin = Packet(Wire.TEACH_BEGIN, 6, 0x12345678, Wire.buffer(5).put(3).putInt(1).array())
+        assertArrayEquals(bytes("a55a01300600050078563412030100000000e5"), begin.encode())
+        val status = CarStatus.decode(PacketDecoder().feed(bytes(
+            "a55a01906400220078563412dc05000001000000780000002c0100002823b80b24fa03010700000004000000040026c5"
+        )).single().payload)
+        assertEquals(3, status.mode)
+        assertEquals(7L, status.teachId)
+        assertEquals(4L, status.pointIndex)
+        assertEquals(1500L, status.pose.timeMs)
+        assertEquals(1L, status.pose.frameId)
+        assertEquals(120, status.pose.xMm)
+        assertEquals(300, status.pose.yMm)
+        assertEquals(90f, status.pose.yawDegrees, 0f)
+        assertEquals(30f, status.pose.gimbalYaw, 0f)
+        assertEquals(-15f, status.pose.gimbalPitch, 0f)
+    }
+
+    @Test
     fun statusAndPointUseTheApprovedUnitsAndFieldOrder() {
         val packet = bytes("""
             A5 5A 01 90 64 00 22 00 78 56 34 12

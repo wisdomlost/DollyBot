@@ -103,6 +103,14 @@ private fun DollyBotNavigation(state: DollyBotUiState, actions: DollyBotActions,
         actions.stopMotion()
     }
 
+    LaunchedEffect(state.recording.blocksDriving) {
+        strafe = 0f
+        forward = 0f
+        turningLeft = false
+        turningRight = false
+        controlGestureSession++
+    }
+
     fun back() {
         if (page == Page.Editor) {
             if (state.editor?.saving == true) return
