@@ -1,73 +1,94 @@
-# DollyBot ESP32 控制系统
+# DollyBot Android App
 
-第一版离线手机控制固件，ESP-IDF **v5.5.4**，目标 **经典 ESP32**，2 MB Flash 基线；无需 PSRAM、Node 构建工具或互联网资源。当前没有 STM32，电机接口仅输出模拟串口日志。
+DollyBot 是通过经典蓝牙 SPP 控制小车、云台和轨迹录制的 Android App。当前发布的是可安装的测试版，配套 Python 模拟车用于没有实车时的联调。
 
-## 编译
+## 下载与安装
 
-安装 ESP-IDF v5.5.4 及 ESP32 工具链，在已激活的 ESP-IDF 终端中：
+**[下载 DollyBot.apk](apk/DollyBot.apk)**
+
+- Android 7.0（API 24）及以上。
+- 安装包为调试签名测试版，不是 Google Play 正式版本。
+- 首次安装时按系统提示允许“附近设备”权限。
+- 如果系统阻止安装，请在系统设置中临时允许当前文件管理器或浏览器安装未知来源应用。
+- 安装前请确认文件来自本仓库；SHA-256：
+
+  ```text
+  ACD835C0906ACDF745C835BFBDA37FE4CEC83B79F2E0BEDAB567B6036CEF35EF
+  ```
+
+## 使用 App
+
+1. 在 Windows 蓝牙设置中与电脑配对，并创建蓝牙“传入”串口。
+2. 打开模拟车或实车，启动 App 的设备页，刷新已配对设备并连接。
+3. 等待握手完成，停车后点击“校准”。校准会建立新的坐标系。
+4. 控制页支持车身移动、旋转和云台偏航/俯仰控制；松手或离开页面会停止车身运动。
+5. 点击“录制”选择模式：
+   - **连续录制**：车端周期上传位姿，App 记录为连续轨迹。
+   - **取点**：点击“取点”保存当前位姿。
+   - **推车**：App 请求车端开始，收到确认后记录车身和云台位姿；录制期间暂停车身控制，保留云台控制。
+6. 点击“停止”后，App 会先保存未命名草稿。可以立即命名保存、稍后保存，或放弃。推车轨迹归入“连续轨迹”，可离线预览和编辑。
+
+## 启动模拟车
+
+需要 Python 3、`pyserial` 和 Tk。Windows 示例：
 
 ```powershell
-idf.py build
+Set-Location 'D:\Android\project\Dollybot'
+python -m pip install pyserial
+python -m simulator.app --port COM4
 ```
 
-本机 EIM 安装的 PowerShell 激活方法（仅本机路径，其他成员使用各自安装路径）：
+也可以设置周期上报间隔，范围是 20–1000 ms，默认 50 ms：
 
 ```powershell
-. C:\Espressif\tools\Microsoft.v5.5.4.PowerShell_profile.ps1
-idf.py --version
-idf.py build
+python -m simulator.app --port COM4 --status-interval-ms 100
 ```
 
-不要使用系统 Python 直接替代 IDF 虚拟环境。普通 export.ps1 在此 EIM 安装下不能自动定位虚拟环境，使用 EIM 激活脚本即可。依赖仅 ESP-IDF 内置组件，无第三方组件下载。`sdkconfig.defaults` 为共享构建配置，生成的 `sdkconfig` 不入库。
+打开串口后周期设置会锁定。模拟车窗口显示连接状态、校准状态、车身位姿、云台角度、录制模式、轨迹和采样数。推车模式会自动生成一段圆弧位姿；App 发送第一条云台指令后，模拟车改为保持 App 指定角度。
 
-## 手动烧录与使用
+更完整的串口、协议和推车联调说明见 [`simulator/README.md`](simulator/README.md)。
 
-本轮开发不自动烧录、清 Flash。连接板子后自行执行，COM5 替换为实际串口：
+## 从源码构建
+
+需要 Android Studio 或 JDK 11+、Android SDK 37 和 Gradle Wrapper。Windows PowerShell：
 
 ```powershell
-idf.py -p COM5 flash
-idf.py -p COM5 monitor
+Set-Location 'D:\Android\project\Dollybot'
+.\gradlew.bat :app:assembleDebug
 ```
 
-监视器退出：Ctrl+]。经典 ESP32 是根据既有工程配置选择的目标，尚未读连接板的芯片信息。若实际为 S3/C3 等，先确认型号，再自行 `idf.py set-target esp32s3` 等并重新编译；该命令会调整本地生成配置。
+生成的 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。发布包使用当前源码重新构建后复制为 `apk/DollyBot.apk`；本目录中的 `app/build/` 仅是本地生成目录，不应提交。
 
-手机连接 **DollyBot**，初始演示密码 **dollybot123**，保留“无互联网”Wi-Fi 连接；浏览器输入 **http://192.168.4.1/**（HTTP）。无需安装 App，也没有 DNS 劫持或强制门户。网页只允许此 IP 的同源 WebSocket；不支持 localhost/mDNS 地址控制。需要时关闭手机自动切换移动网络。
+## 测试
 
-摇杆或方向按钮按住移动、松开停止；速度滑条限制归一化指令幅度。立即停止按钮清除当前输入；切后台、失焦、触摸取消均主动停止。网页自动重连后保持停止，必须重新按下。单个网页独占控制，第二个控制端会被拒绝并重试。关闭首个页面后可接管，异常网络中断可能需等待 TCP 会话超时释放所有权，但运动保护会先停止。
+Android 单元测试：
 
-热点名、密码、信道通过 `idf.py menuconfig` → DollyBot 配置。初始密码是公开演示配置，正式使用请改本地配置，勿提交私密密码。访问权限由 WPA2 热点及单控制端机制约束；HTTP/WS 未做 TLS 或用户账户认证。
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+```
 
-## 目录与扩展
+模拟车主机测试：
 
-| 路径 | 职责 |
+```powershell
+python -m unittest discover -s simulator/tests -v
+```
+
+若连接 Android 模拟器或真机，可运行仪器测试：
+
+```powershell
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
+
+主机测试和 Android 测试不等同于真实蓝牙、实车运动或硬件验收；本发布包未自动烧录固件，也未修改或擦除 Flash。
+
+## 目录
+
+| 路径 | 内容 |
 | --- | --- |
-| `main/wifi_ap.c` | WPA2 SoftAP、网络初始化 |
-| `main/web_server.c` | 内嵌静态资源、同源检查、WebSocket 收发 |
-| `main/protocol.c` | 有界 JSON 协议校验，不依赖网络 |
-| `main/control.c` | 控制权、序号、500 ms 超时保护、独立 20 ms 检查任务 |
-| `main/motion_link.*` | 独立运动硬件接口，目前模拟后端，未来替换 UART |
-| `web/` | 无框架 HTML/CSS/JS，编译时内嵌，无 CDN |
-| `tests/` | 真实协议和控制模块主机测试、浏览器逻辑适配器测试 |
-| `docs/` | 协议、硬件接入与验证说明 |
+| `app/` | Android App 源码、资源和测试 |
+| `simulator/` | Python 蓝牙模拟车和协议测试 |
+| `apk/DollyBot.apk` | 唯一的可下载测试版 APK |
+| `gradle/`、`gradlew*` | Gradle Wrapper 和构建配置 |
+| `AGENTS.md` | 项目开发约定 |
 
-硬件状态与指令状态严格区分：网页 linear/angular 是归一化目标指令，**不是实测速度**；STM32 始终未连接，不生成虚假电量、里程、轨迹。运行时间、堆内存来自 ESP32 真实运行信息。轨迹录制、预览、回放仅提供禁用入口。
-
-## 软件测试
-
-主机需 Node.js（无 npm 依赖）、MinGW GCC、已安装的 IDF（复用其 cJSON 源码）：
-
-```powershell
-$env:PATH = 'D:\msys2\ucrt64\bin;' + $env:PATH
-.\tools\test.ps1 -IdfPath $env:IDF_PATH -HostGcc D:\msys2\ucrt64\bin\gcc.exe
-```
-
-这会编译真实的 `protocol.c`、`control.c` 和 IDF 自带 cJSON，使用模拟时钟、任务和硬件适配器验证边界条件；不验证 FreeRTOS 调度、射频或实际电机。前端测试在 Node VM 中运行原始脚本和 DOM/WebSocket 适配器，不等同于真机浏览器视觉或 Wi-Fi 联调。详见 [验证记录](docs/validation.md)。
-
-## 硬件验收
-
-1. 启动日志应出现 AP 地址和 `SIMULATION ONLY`，手机页面所有资源可离线加载。
-2. 按住各方向、摇杆、调速，核对串口 `SIM command` 和网页指令符号；松开、停止、切后台后归零。
-3. 按住时断开手机 Wi-Fi；核对串口在最后运动指令后约 500–520 ms 加任务调度延迟内归零。不能只看已经断连的页面。
-4. 第二部手机应不能抢占；关闭首个页面后新页面可连接，重连不自动恢复运动。
-5. 长时间运行检查堆内存、重连、并发静态资源请求；用 iOS Safari / Android Chrome 检查多点触控和屏幕旋转。
-6. 接入电机前必须实现 STM32 独立失联停车并完成架空轮测试。
+当前仓库发布内容未包含正式签名密钥，也没有附带开源许可证。公开发布前请根据项目需要补充许可证和正式签名流程。

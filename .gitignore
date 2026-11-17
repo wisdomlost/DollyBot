@@ -27,3 +27,10 @@ __pycache__/
 .externalNativeBuild
 .cxx
 local.properties
+/.kotlin/
+*.apk
+!apk/
+!apk/DollyBot.apk
+*.aab
+*.jks
+*.keystore
