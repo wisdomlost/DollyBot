@@ -3,8 +3,8 @@
 DollyBot 是通过经典蓝牙 SPP 控制小车、云台和轨迹录制的 Android App。当前发布的是可安装的测试版，配套 Python 模拟车用于没有实车时的联调。
 
 ## 下载与安装
-
-**[下载 DollyBot.apk](apk/DollyBot.apk)**
+点击连接下载开发中的配套Android软件😎
+**[下载 DollyBot.apk](outside_androidstudio/apk/DollyBot.apk)**
 
 - Android 7.0（API 24）及以上。
 - 安装包为调试签名测试版，不是 Google Play 正式版本。
@@ -30,7 +30,7 @@ DollyBot 是通过经典蓝牙 SPP 控制小车、云台和轨迹录制的 Andro
 
 ## 启动模拟车
 
-需要 Python 3、`pyserial` 和 Tk。Windows 示例：
+模拟车在文件夹simulator中，运行需要 Python 3、`pyserial` 和 Tk。Windows 示例：
 
 ```powershell
 Set-Location 'D:\Android\project\Dollybot'
