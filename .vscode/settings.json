@@ -1,0 +1,42 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.extensionActivationMode": "always",
+  "cmake.configureOnOpen": false,
+  "cmake.configureOnEdit": false,
+  "cmake.automaticReconfigure": false,
+  "cmake.autoSelectActiveFolder": false,
+  "cmake.options.advanced": {
+    "build": {
+      "statusBarVisibility": "inherit",
+      "inheritDefault": "hidden"
+    },
+    "launch": {
+      "statusBarVisibility": "inherit",
+      "inheritDefault": "hidden"
+    },
+    "debug": {
+      "statusBarVisibility": "inherit",
+      "inheritDefault": "hidden"
+    }
+  },
+  "idf.openOcdConfigs": [
+    "board/esp32-wrover-kit-3.3v.cfg"
+  ],
+  "idf.port": "COM6",
+  "idf.currentSetup": "D:\\ESP_IDF",
+  "idf.enableCCache": false,
+  "idf.customExtraVars": {
+    "IDF_PATH": "D:\\ESP_IDF",
+    "IDF_TOOLS_PATH": "D:\\Espressif\\Espressif",
+    "IDF_PYTHON_ENV_PATH": "D:\\Espressif\\Espressif\\python_env\\idf5.5_py3.11_env",
+    "IDF_TARGET": "esp32"
+  },
+  "idf.flashType": "UART",
+  "idf.flashBaudRate": "115200",
+  "clangd.path": "D:\\Espressif\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\Esp32_project\\Dollybot_esp32\\build"
+  ]
+}
