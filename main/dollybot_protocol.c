@@ -18,9 +18,7 @@ enum {
 enum {
     HELLO = 0x01,
     PING = 0x02,
-    MOTION = 0x10,
     GIMBAL = 0x11,
-    STOP = 0x12,
     CALIBRATE = 0x20,
     TEACH_BEGIN = 0x30,
     TEACH_END = 0x31,
@@ -112,7 +110,7 @@ static uint8_t log_command(dollybot_protocol_t *protocol, uint8_t type, uint16_t
                            const uint8_t *payload, uint16_t length)
 {
     switch (type) {
-    case MOTION: {
+    case DOLLYBOT_MOTION: {
         if (length != 6) {
             return RESULT_BAD_ARGUMENT;
         }
@@ -140,13 +138,13 @@ static uint8_t log_command(dollybot_protocol_t *protocol, uint8_t type, uint16_t
         printf("GIMBAL seq=%u yaw_cdeg=%d pitch_cdeg=%d\n", (unsigned)seq, yaw, pitch);
         return RESULT_OK;
     }
-    case STOP:
+    case DOLLYBOT_STOP:
     case CALIBRATE:
         if (length != 0) {
             return RESULT_BAD_ARGUMENT;
         }
-        printf("%s seq=%u\n", type == STOP ? "STOP" : "CALIBRATE", (unsigned)seq);
-        return type == STOP ? RESULT_OK : RESULT_UNSUPPORTED;
+        printf("%s seq=%u\n", type == DOLLYBOT_STOP ? "STOP" : "CALIBRATE", (unsigned)seq);
+        return type == DOLLYBOT_STOP ? RESULT_OK : RESULT_UNSUPPORTED;
     case TEACH_BEGIN:
         if (length != 5 || payload[0] < 1 || payload[0] > 3) {
             return RESULT_BAD_ARGUMENT;
@@ -167,7 +165,8 @@ static uint8_t log_command(dollybot_protocol_t *protocol, uint8_t type, uint16_t
     }
 }
 
-static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_t now_ms)
+static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_t now_ms,
+                         dollybot_forward_fn forward)
 {
     const uint8_t *frame = protocol->rx;
     uint8_t type = frame[3];
@@ -178,12 +177,14 @@ static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_
     }
 
     uint8_t result = RESULT_OK;
+    bool new_session = false;
     if (frame[2] != VERSION) {
         result = RESULT_UNSUPPORTED;
     } else if (type == HELLO) {
         if (length != 0 || session == 0) {
             result = RESULT_BAD_ARGUMENT;
         } else if (session != protocol->session) {
+            new_session = true;
             protocol->session = session;
             protocol->started_ms = now_ms;
             protocol->next_status_ms = now_ms;
@@ -198,11 +199,18 @@ static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_
         }
     } else {
         result = log_command(protocol, type, seq, frame + HEADER_SIZE, length);
-        if (result == RESULT_OK && (type == MOTION || type == GIMBAL)) {
-            return true;
-        }
     }
-    return queue_ack(protocol, session, seq, type, result);
+
+    bool streaming = type == DOLLYBOT_MOTION || type == GIMBAL;
+    if ((!streaming || result != RESULT_OK) && !queue_ack(protocol, session, seq, type, result)) {
+        return false;
+    }
+
+    // The local endpoint can report unsupported features while UART captures the request.
+    if (forward != NULL && frame[2] == VERSION && type < ACK && result != RESULT_BAD_ARGUMENT) {
+        forward(frame, HEADER_SIZE + length + CRC_SIZE, type, new_session);
+    }
+    return true;
 }
 
 static void discard_rx(dollybot_protocol_t *protocol, size_t count)
@@ -211,7 +219,8 @@ static void discard_rx(dollybot_protocol_t *protocol, size_t count)
     memmove(protocol->rx, protocol->rx + count, protocol->rx_length);
 }
 
-bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms)
+bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms,
+                   dollybot_forward_fn forward)
 {
     for (size_t i = 0; i < length; ++i) {
         protocol->rx[protocol->rx_length++] = data[i];
@@ -238,7 +247,7 @@ bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t le
                 discard_rx(protocol, 1);
                 continue;
             }
-            bool accepted = handle_frame(protocol, payload_length, now_ms);
+            bool accepted = handle_frame(protocol, payload_length, now_ms, forward);
             discard_rx(protocol, frame_length);
             if (!accepted) {
                 return false;

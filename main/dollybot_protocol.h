@@ -8,6 +8,8 @@ enum {
     DOLLYBOT_MAX_FRAME = 270,
     DOLLYBOT_STATUS_FRAME = 48,
     DOLLYBOT_ACK_QUEUE_SIZE = 8,
+    DOLLYBOT_MOTION = 0x10,
+    DOLLYBOT_STOP = 0x12,
 };
 
 typedef struct {
@@ -30,8 +32,12 @@ typedef struct {
     size_t ack_count;
 } dollybot_protocol_t;
 
+// Called synchronously for a valid request. The frame bytes are borrowed during the call.
+typedef void (*dollybot_forward_fn)(const uint8_t *frame, size_t length, uint8_t type, bool new_session);
+
 // State starts zeroed for each SPP connection. False means the ACK queue is full.
-bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms);
+bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms,
+                   dollybot_forward_fn forward);
 
 // Returns the next ACK or due STATUS, or zero if there is nothing to send.
 size_t dollybot_next_frame(dollybot_protocol_t *protocol, uint64_t now_ms,

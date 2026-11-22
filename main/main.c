@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "dollybot_protocol.h"
+#include "stm32_uart.h"
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -54,6 +55,12 @@ static bool enqueue_spp_event(spp_event_t *event)
     return false;
 }
 
+static void disconnect_protocol_peer(uint32_t handle)
+{
+    stm32_uart_discard_pending();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_spp_disconnect(handle));
+}
+
 static void protocol_task(void *arg)
 {
     (void)arg;
@@ -76,19 +83,21 @@ static void protocol_task(void *arg)
                 congested = false;
                 break;
             case SPP_LINK_CLOSED:
+                stm32_uart_discard_pending();
                 handle = 0;
                 break;
             case SPP_RX:
-                if (handle != 0 && !dollybot_feed(&protocol, event.data, event.length, now_ms)) {
+                if (handle != 0 && !dollybot_feed(&protocol, event.data, event.length, now_ms,
+                                                  stm32_uart_forward)) {
                     ESP_LOGW(TAG, "DollyBot ACK queue overflow");
-                    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_spp_disconnect(handle));
+                    disconnect_protocol_peer(handle);
                     handle = 0;
                 }
                 break;
             case SPP_TX_DONE:
                 if (handle != 0 && event.length != bytes_in_flight) {
                     ESP_LOGW(TAG, "SPP write failed");
-                    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_spp_disconnect(handle));
+                    disconnect_protocol_peer(handle);
                     handle = 0;
                 }
                 bytes_in_flight = 0;
@@ -110,7 +119,7 @@ static void protocol_task(void *arg)
             if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_spp_write(handle, length, output)) == ESP_OK) {
                 bytes_in_flight = length;
             } else {
-                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_spp_disconnect(handle));
+                disconnect_protocol_peer(handle);
                 handle = 0;
             }
         }
@@ -219,6 +228,7 @@ static void spp_callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
+    stm32_uart_init();
 
     spp_events = xQueueCreate(8, sizeof(spp_event_t));
     if (spp_events == NULL) {
