@@ -30,6 +30,8 @@ class RecordingControlsTest {
         var captures = 0
         var finishes = 0
         var stops = 0
+        val controlPageEvents = mutableListOf<Boolean>()
+        override fun setControlPageActive(active: Boolean) { controlPageEvents += active }
         override fun selectRecordingMode(mode: RecordingMode) { selected = mode }
         override fun startRecording(mode: RecordingMode) { started = mode }
         override fun captureWaypoint() { captures++ }
@@ -42,6 +44,17 @@ class RecordingControlsTest {
             compose.activity.setContent {
                 DollybotTheme { DollyBotApp(snapshot.value, spy) }
             }
+        }
+    }
+
+    @Test
+    fun switchingTabsOnlyEnablesControlWhileItsPageIsVisible() {
+        show()
+        compose.onNodeWithText("设备").performClick()
+        compose.onNodeWithText("轨迹").performClick()
+        compose.onNodeWithText("控制").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(true, false, true), spy.controlPageEvents)
         }
     }
 

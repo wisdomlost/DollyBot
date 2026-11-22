@@ -39,7 +39,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val actions = object : DollyBotActions by session {
-            // Keep mode entry points explicit so their signatures cannot silently fall back to no-op defaults.
+            // Keep these entry points explicit so they cannot fall back to no-op defaults.
+            override fun setControlPageActive(active: Boolean) = session.setControlPageActive(active)
             override fun selectRecordingMode(mode: RecordingMode) = session.selectRecordingMode(mode)
             override fun startRecording(mode: RecordingMode) = session.startRecording(mode)
             override fun refreshDevices() = withBluetoothPermission { session.refreshDevices() }

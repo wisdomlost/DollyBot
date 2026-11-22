@@ -121,6 +121,7 @@ internal enum class GimbalAxis(@param:StringRes val label: Int) {
 internal interface DollyBotActions {
     fun connect() = Unit
     fun calibrate() = Unit
+    fun setControlPageActive(active: Boolean) = Unit
     fun drive(direction: DriveDirection) = Unit
     fun move(input: MotionInput) = Unit
     fun adjustGimbal(axis: GimbalAxis, degrees: Float) = Unit

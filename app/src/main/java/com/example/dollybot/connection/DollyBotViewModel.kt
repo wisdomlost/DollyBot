@@ -72,6 +72,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     private var pump: Job? = null
     private var heartbeat: Job? = null
     private var teachingJob: Job? = null
+    private var controlActive = false
     private var motion = MotionInput()
     private var yaw = 0f
     private var pitch = 0f
@@ -209,7 +210,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastStatusAt > 3000) throw IOException(text(R.string.telemetry_timeout))
                             sendMotion()
-                            if (gimbalDirty) {
+                            if (controlActive && gimbalDirty) {
                                 sendGimbal()
                                 gimbalDirty = false
                             }
@@ -249,7 +250,18 @@ internal class DollyBotViewModel @JvmOverloads constructor(
         )) }
     }
 
+    override fun setControlPageActive(active: Boolean) {
+        if (controlActive == active) return
+        controlActive = active
+        if (!active) {
+            gimbalDirty = false
+            link?.discardControlPackets()
+            stopMotion(attempts = 1)
+        }
+    }
+
     override fun move(input: MotionInput) {
+        if (!controlActive) return
         if (state.value.recording.blocksDriving) {
             motion = MotionInput()
             return
@@ -276,17 +288,20 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     override fun adjustGimbal(axis: GimbalAxis, degrees: Float) {
+        if (!controlActive) return
         if (axis == GimbalAxis.Yaw) yaw = degrees.coerceIn(-180f, 180f)
         else pitch = degrees.coerceIn(-180f, 180f)
         gimbalDirty = true
         mutableState.update { it.copy(yawDegrees = yaw, pitchDegrees = pitch) }
     }
 
-    override fun stopMotion() {
+    override fun stopMotion() = stopMotion(attempts = 3)
+
+    private fun stopMotion(attempts: Int) {
         motion = MotionInput()
         if (state.value.device.connection != ConnectionStatus.Connected) return
         viewModelScope.launch {
-            runCatching { request(Wire.STOP) }.onFailure { showError(it.message) }
+            runCatching { request(Wire.STOP, attempts = attempts) }.onFailure { showError(it.message) }
         }
     }
 
@@ -386,8 +401,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     fun onBackground() {
         previewJob?.cancel()
         mutableState.update { it.copy(editor = it.editor?.copy(playing = false)) }
+        setControlPageActive(false)
         if (state.value.device.connection != ConnectionStatus.Connected) return
-        stopMotion()
         teachingJob?.cancel()
         finalizeRecording(interrupted = true)
         viewModelScope.launch {
@@ -783,13 +798,13 @@ internal class DollyBotViewModel @JvmOverloads constructor(
         }
     }
 
-    private suspend fun request(type: Int, data: ByteArray = byteArrayOf()): Packet {
+    private suspend fun request(type: Int, data: ByteArray = byteArrayOf(), attempts: Int = 3): Packet {
         val seq = nextSequence()
         val packet = Packet(type, seq, session, data)
         val response = CompletableDeferred<Packet>()
         pending[seq] = Pending(type, response)
         try {
-            repeat(3) {
+            repeat(attempts) {
                 link?.send(packet) ?: throw IOException(text(R.string.disconnected))
                 val result = withTimeoutOrNull(1000) { response.await() }
                 if (result != null) {
@@ -822,7 +837,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     private fun sendMotion() {
-        if (state.value.recording.blocksDriving) return
+        if (!controlActive || state.value.recording.blocksDriving) return
         val data = Wire.buffer(6)
             .putShort((motion.strafe * 1000).roundToInt().toShort())
             .putShort((motion.forward * 1000).roundToInt().toShort())

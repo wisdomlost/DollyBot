@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 internal interface CarLink {
     suspend fun connect(device: BluetoothDevice)
     fun send(packet: Packet)
+    fun discardControlPackets() = Unit
     fun close()
 }
 
@@ -25,12 +26,15 @@ internal class BluetoothLink(
     private val receive: (Packet) -> Unit,
     private val disconnected: (Throwable) -> Unit
 ) : CarLink {
+    private data class QueuedControl(val packet: Packet, val generation: Int)
+
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var closed = false
+    @Volatile private var controlGeneration = 0
     private val urgent = Channel<Packet>(Channel.UNLIMITED)
     private val commands = Channel<Packet>(Channel.UNLIMITED)
-    private val motion = Channel<Packet>(Channel.CONFLATED)
-    private val gimbal = Channel<Packet>(Channel.CONFLATED)
+    private val motion = Channel<QueuedControl>(Channel.CONFLATED)
+    private val gimbal = Channel<QueuedControl>(Channel.CONFLATED)
     private var reader: Job? = null
     private var writer: Job? = null
 
@@ -64,12 +68,13 @@ internal class BluetoothLink(
             try {
                 val output = connection.outputStream
                 while (!closed) {
-                    val packet = urgent.tryReceive().getOrNull() ?: select {
+                    val packet = urgent.tryReceive().getOrNull() ?: select<Packet?> {
                         urgent.onReceive { it }
                         commands.onReceive { it }
-                        motion.onReceive { it }
-                        gimbal.onReceive { it }
+                        motion.onReceive { it.currentPacket() }
+                        gimbal.onReceive { it.currentPacket() }
                     }
+                    if (packet == null) continue
                     output.write(packet.encode())
                     output.flush()
                 }
@@ -86,10 +91,20 @@ internal class BluetoothLink(
                 motion.tryReceive()
                 urgent.trySend(packet)
             }
-            Wire.MOTION -> motion.trySend(packet)
-            Wire.GIMBAL -> gimbal.trySend(packet)
+            Wire.MOTION -> motion.trySend(QueuedControl(packet, controlGeneration))
+            Wire.GIMBAL -> gimbal.trySend(QueuedControl(packet, controlGeneration))
             else -> commands.trySend(packet)
         }
+    }
+
+    private fun QueuedControl.currentPacket(): Packet? =
+        packet.takeIf { generation == controlGeneration }
+
+    override fun discardControlPackets() {
+        // The writer may have selected a control packet before processing the page exit.
+        controlGeneration++
+        motion.tryReceive()
+        gimbal.tryReceive()
     }
 
     override fun close() {

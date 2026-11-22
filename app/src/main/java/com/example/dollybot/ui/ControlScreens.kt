@@ -56,20 +56,24 @@ internal fun ControlScreen(
     onMove: (Float, Float) -> Unit,
     onRotate: (DriveDirection, Boolean) -> Unit,
     onGimbalChange: (Float, Float) -> Unit,
-    onStopMotion: () -> Unit,
+    onControlPageActive: (Boolean) -> Unit,
     onContinuousTeaching: () -> Unit,
     onWaypointTeaching: () -> Unit
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val stopMotion by rememberUpdatedState(onStopMotion)
+    val setControlPageActive by rememberUpdatedState(onControlPageActive)
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) stopMotion()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> setControlPageActive(true)
+                Lifecycle.Event.ON_PAUSE -> setControlPageActive(false)
+                else -> Unit
+            }
         }
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
-            stopMotion()
+            setControlPageActive(false)
         }
     }
 

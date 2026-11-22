@@ -53,9 +53,10 @@ class MainActivityRecordingTest {
     }
 
     @Test
-    fun realActivityAdapterOverridesBothCurrentRecordingSignatures() {
+    fun realActivityAdapterOverridesControlAndRecordingSignatures() {
         // A stale adapter can still load because DollyBotActions supplies no-op default methods.
         val adapter = Class.forName("com.example.dollybot.MainActivity\$onCreate\$actions\$1")
+        adapter.getDeclaredMethod("setControlPageActive", Boolean::class.javaPrimitiveType)
         adapter.getDeclaredMethod("selectRecordingMode", RecordingMode::class.java)
         adapter.getDeclaredMethod("startRecording", RecordingMode::class.java)
     }

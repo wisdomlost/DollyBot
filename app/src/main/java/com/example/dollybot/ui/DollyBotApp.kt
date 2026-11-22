@@ -93,12 +93,16 @@ private fun DollyBotNavigation(state: DollyBotUiState, actions: DollyBotActions,
         ))
     }
 
-    fun stopControlMotion() {
+    fun resetControlInput() {
         strafe = 0f
         forward = 0f
         turningLeft = false
         turningRight = false
         controlGestureSession++
+    }
+
+    fun stopControlMotion() {
+        resetControlInput()
         publishMotion()
         actions.stopMotion()
     }
@@ -251,7 +255,10 @@ private fun DollyBotNavigation(state: DollyBotUiState, actions: DollyBotActions,
                                 actions.adjustGimbal(GimbalAxis.Yaw, yaw)
                                 actions.adjustGimbal(GimbalAxis.Pitch, pitch)
                             },
-                            onStopMotion = ::stopControlMotion,
+                            onControlPageActive = { active ->
+                                if (!active) resetControlInput()
+                                actions.setControlPageActive(active)
+                            },
                             onContinuousTeaching = { page = Page.ContinuousTeaching },
                             onWaypointTeaching = { page = Page.WaypointTeaching }
                         )

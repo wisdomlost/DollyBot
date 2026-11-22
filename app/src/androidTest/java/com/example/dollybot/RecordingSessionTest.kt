@@ -24,6 +24,7 @@ import com.example.dollybot.ui.DriveDirection
 import com.example.dollybot.ui.GimbalAxis
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -76,6 +77,48 @@ class RecordingSessionTest {
     private fun begin(kind: RecordingMode) {
         main { model.selectRecordingMode(kind); model.startRecording(kind) }
         await { model.state.value.recording.stage == RecordingStage.Recording && !model.state.value.teaching.busy }
+    }
+
+    @Test
+    fun controlPacketsStopWhenPageClosesWhileHeartbeatAndStatusContinue() {
+        await { car.sent.any { it.type == Wire.PING } }
+        assertEquals(Wire.HELLO, car.sent.first().type)
+        assertTrue(car.sent.drop(1).all { it.type == Wire.PING })
+
+        main {
+            model.setControlPageActive(true)
+            model.drive(DriveDirection.Forward)
+            model.adjustGimbal(GimbalAxis.Yaw, 45f)
+        }
+        await { car.sent.any { it.type == Wire.MOTION } && car.sent.any { it.type == Wire.GIMBAL } }
+
+        var exitIndex = 0
+        var exitStatus = 0L
+        main {
+            exitIndex = car.sent.size
+            exitStatus = model.state.value.teaching.pose!!.timeMs
+            car.acknowledgeStop = false
+            model.adjustGimbal(GimbalAxis.Pitch, 25f)
+            model.setControlPageActive(false)
+            model.setControlPageActive(false)
+            model.drive(DriveDirection.Backward)
+            model.adjustGimbal(GimbalAxis.Yaw, -45f)
+        }
+        await {
+            car.sent.drop(exitIndex).count { it.type == Wire.PING } >= 3 &&
+                model.state.value.teaching.pose!!.timeMs > exitStatus
+        }
+        val outsideControl = car.sent.drop(exitIndex)
+        assertEquals(Wire.STOP, outsideControl.first().type)
+        assertTrue(outsideControl.drop(1).all { it.type == Wire.PING })
+        assertEquals(ConnectionStatus.Connected, model.state.value.device.connection)
+
+        val resumeIndex = car.sent.size
+        main { model.setControlPageActive(true) }
+        await { car.sent.drop(resumeIndex).any { it.type == Wire.MOTION } }
+        val resumed = car.sent.drop(resumeIndex)
+        assertArrayEquals(ByteArray(6), resumed.first { it.type == Wire.MOTION }.payload)
+        assertFalse(resumed.any { it.type == Wire.GIMBAL })
     }
 
     @Test
@@ -157,6 +200,7 @@ class RecordingSessionTest {
         await { model.state.value.recording.stage == RecordingStage.Recording && !model.state.value.teaching.busy }
         assertEquals(1, model.state.value.teaching.continuous.poses.size)
         main {
+            model.setControlPageActive(true)
             model.drive(DriveDirection.Forward)
             model.adjustGimbal(GimbalAxis.Yaw, 45f)
         }
@@ -270,7 +314,8 @@ class RecordingSessionTest {
         val receive: (Packet) -> Unit,
         val disconnected: (Throwable) -> Unit
     ) : CarLink {
-        val sent = mutableListOf<Packet>()
+        val sent = CopyOnWriteArrayList<Packet>()
+        var acknowledgeStop = true
         var omitFinalSample = false
         var holdBeginAck = false
         var beginResult = 0
@@ -308,7 +353,7 @@ class RecordingSessionTest {
             when (packet.type) {
                 Wire.HELLO -> { ack(packet); status() }
                 Wire.PING -> { ack(packet); status() }
-                Wire.STOP -> ack(packet)
+                Wire.STOP -> if (acknowledgeStop) ack(packet) else Unit
                 Wire.TEACH_BEGIN -> {
                     if (beginResult != 0) { ack(packet, result = beginResult); return }
                     beginRequest = packet
