@@ -1,9 +1,11 @@
-"""Single-threaded virtual car and teaching state machine."""
+"""Single-threaded virtual car, teaching, and trajectory playback."""
 
+from bisect import bisect_right
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 import struct
+from typing import Optional
 
 from . import protocol as p
 
@@ -38,6 +40,40 @@ class TrajectoryTransfer:
     @property
     def size(self):
         return self.name_length + self.point_count * p.POSE_DATA.size
+
+
+def yaw_delta(start: int, end: int) -> int:
+    return (end - start + 18000) % 36000 - 18000
+
+
+def waypoint_time_ms(start: Pose, end: Pose) -> int:
+    distance = math.hypot(end.x - start.x, end.y - start.y)
+    turn = abs(yaw_delta(start.yaw, end.yaw))
+    return math.ceil(max(distance / 200, turn / 9000, 0.2) * 1000)
+
+
+class TrajectoryPlayback:
+    def __init__(self, trajectory: UploadedTrajectory, origin: Pose, now: float):
+        first = trajectory.points[0]
+        origin = replace(origin, t_ms=first.t_ms, frame_id=first.frame_id)
+        self.points = (origin,) + trajectory.points
+        self.started_at = now
+        self.times = [0, 0 if origin == first else waypoint_time_ms(origin, first)]
+        for index in range(2, len(self.points)):
+            start, end = self.points[index - 1], self.points[index]
+            duration = (
+                (end.t_ms - start.t_ms) & 0xFFFFFFFF
+                if trajectory.kind == 1 else waypoint_time_ms(start, end)
+            )
+            self.times.append(self.times[-1] + duration)
+
+    def segment_at(self, now: float) -> Optional[tuple[Pose, Pose, float]]:
+        elapsed = (now - self.started_at) * 1000
+        index = bisect_right(self.times, elapsed) - 1
+        if index == len(self.times) - 1:
+            return None
+        fraction = (elapsed - self.times[index]) / (self.times[index + 1] - self.times[index])
+        return self.points[index], self.points[index + 1], fraction
 
 
 class StatusSchedule:
@@ -89,13 +125,18 @@ class Simulator:
         self.cache = OrderedDict()
         self.trajectory_transfer = None
         self.uploaded_trajectory = None
+        self.playback = None
+        self.playback_state = None
 
     def advance(self, now: float):
         if now < self.now:
             raise ValueError("Simulation time must be monotonic")
+        link_deadline = self.last_contact + 3.0
+        if self.playback is not None:
+            self._advance_playback(self.playback, min(now, link_deadline))
         if self.mode == 3:
             # An external push is independent of motor commands and sampling frequency.
-            until = min(now, self.last_contact + 3.0) if self.connected else now
+            until = min(now, link_deadline) if self.connected else now
             elapsed = max(0.0, until - self.push_started_at)
             x, y, yaw, gimbal_yaw, gimbal_pitch = self.push_origin
             theta, origin_yaw = math.radians(elapsed * 20), math.radians(yaw)
@@ -110,7 +151,7 @@ class Simulator:
         motion_end = min(now, self.last_motion + 0.3)
         remaining = max(0.0, motion_end - self.now)
         strafe, forward, rotation = self.motion
-        while remaining > 1e-9:
+        while remaining > 1e-9 and (strafe or forward or rotation):
             dt = min(remaining, 0.02)
             theta = math.radians(self.yaw + rotation / 1000 * 90 * dt / 2)
             self.x += (strafe * math.cos(theta) + forward * math.sin(theta)) * 0.2 * dt
@@ -121,7 +162,7 @@ class Simulator:
         if now - self.last_motion >= 0.3 and any(self.motion):
             self.motion = (0, 0, 0)
             self.motion_timeout = True
-        if self.connected and now - self.last_contact >= 3.0:
+        if self.connected and now >= link_deadline:
             self.disconnect()
 
     def disconnect(self):
@@ -130,6 +171,30 @@ class Simulator:
         self.motion = (0, 0, 0)
         self.connected = False
         self.trajectory_transfer = None
+        self._stop_playback()
+
+    def _stop_playback(self):
+        if self.playback is not None:
+            self.playback = None
+            self.playback_state = "stopped"
+
+    def _advance_playback(self, playback: TrajectoryPlayback, now: float):
+        segment = playback.segment_at(now)
+        if segment is None:
+            end = playback.points[-1]
+            self.x, self.y, self.yaw = end.x, end.y, end.yaw / 100
+            self.gimbal_yaw, self.gimbal_pitch = end.gimbal_yaw, end.gimbal_pitch
+            self.playback = None
+            self.playback_state = "completed"
+            return
+
+        start, end, fraction = segment
+        self.x = start.x + (end.x - start.x) * fraction
+        self.y = start.y + (end.y - start.y) * fraction
+        yaw = start.yaw + yaw_delta(start.yaw, end.yaw) * fraction
+        self.yaw = ((yaw + 18000) % 36000 - 18000) / 100
+        self.gimbal_yaw = round(start.gimbal_yaw + (end.gimbal_yaw - start.gimbal_yaw) * fraction)
+        self.gimbal_pitch = round(start.gimbal_pitch + (end.gimbal_pitch - start.gimbal_pitch) * fraction)
 
     def pose(self) -> Pose:
         return Pose(
@@ -203,6 +268,8 @@ class Simulator:
                 raise ValueError("Motion out of range")
             if self.mode == 3:
                 return [self._ack(request, p.BAD_STATE)]
+            if any(motion):
+                self._stop_playback()
             self.motion = motion
             self.last_motion = self.now
             self.last_motion_seq = request.seq
@@ -212,6 +279,7 @@ class Simulator:
             yaw, pitch = struct.unpack("<hh", data)
             if abs(yaw) > 18000 or abs(pitch) > 18000:
                 raise ValueError("Gimbal out of range")
+            self._stop_playback()
             self.gimbal_yaw, self.gimbal_pitch = yaw, pitch
             if self.mode == 3:
                 self.push_gimbal_manual = True
@@ -219,9 +287,11 @@ class Simulator:
         if kind == p.STOP:
             self.motion = (0, 0, 0)
             self.motion_timeout = False
+            self._stop_playback()
+            self.trajectory_transfer = None
             return [self._ack(request)]
         if kind == p.CALIBRATE:
-            if self.mode or any(self.motion):
+            if self.mode or self.playback is not None or any(self.motion):
                 return [self._ack(request, p.BAD_STATE)]
             self.x = self.y = self.yaw = 0.0
             self.frame_id = (self.frame_id + 1) & 0xFFFFFFFF or 1
@@ -236,7 +306,7 @@ class Simulator:
                 return [self._ack(request, p.NOT_CALIBRATED)]
             if frame_id != self.frame_id:
                 return [self._ack(request, p.FRAME_MISMATCH)]
-            if self.mode:
+            if self.mode or self.playback is not None:
                 return [self._ack(request, p.BAD_STATE)]
             self.mode = mode
             self.teach_id = (self.teach_id + 1) & 0xFFFFFFFF or 1
@@ -294,11 +364,18 @@ class Simulator:
 
         if data or len(transfer.data) != transfer.size:
             raise ValueError("Incomplete trajectory")
+        if self.mode:
+            return self._ack(request, p.BAD_STATE)
         name = transfer.data[:transfer.name_length].decode("utf-8")
         if not name.strip():
             raise ValueError("Empty trajectory name")
         pose_bytes = memoryview(transfer.data)[transfer.name_length:]
         points = tuple(Pose(*values) for values in p.POSE_DATA.iter_unpack(pose_bytes))
-        self.uploaded_trajectory = UploadedTrajectory(name, transfer.kind, transfer.incomplete, points)
+        uploaded = UploadedTrajectory(name, transfer.kind, transfer.incomplete, points)
+        self.playback = TrajectoryPlayback(uploaded, self.pose(), self.now)
+        self.playback_state = "playing"
+        self.motion = (0, 0, 0)
+        self.motion_timeout = False
+        self.uploaded_trajectory = uploaded
         self.trajectory_transfer = None
         return self._ack(request, value=len(points))

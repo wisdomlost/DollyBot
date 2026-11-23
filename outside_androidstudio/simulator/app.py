@@ -1,4 +1,4 @@
-"""Run from the repository root: python -m simulator.app --port COM4."""
+"""Run from outside_androidstudio: python -m simulator.app --port COM4."""
 
 import argparse
 import math
@@ -46,6 +46,11 @@ class SerialWorker:
                     model.advance(now)
                     received = connection.read(min(max(connection.in_waiting, 1), 4096))
                     for packet in decoder.feed(received):
+                        print(
+                            f"RX type=0x{packet.kind:02X} seq={packet.seq} session=0x{packet.session:08X} "
+                            f"len={len(packet.payload)} frame={packet.encode().hex(' ').upper()}",
+                            flush=True,
+                        )
                         previous_teach_id = model.teach_id
                         for reply in model.handle(packet, time.monotonic()):
                             connection.write(reply.encode())
@@ -69,6 +74,7 @@ class SerialWorker:
                             "waypoints": tuple(model.histories[2]),
                             "push": tuple(model.histories[3]),
                             "uploaded_trajectory": model.uploaded_trajectory,
+                            "playback_state": model.playback_state,
                             "errors": decoder.errors,
                         })
                     self.stop_event.wait(max(0.0, 0.02 - (time.monotonic() - tick_started)))
@@ -165,11 +171,16 @@ class SimulatorWindow:
         state = self.snapshot
         pose = state["pose"]
         mode = {0: "空闲", 1: "连续录制", 2: "关键点取点", 3: "推车录制"}[state["mode"]]
+        if state["playback_state"] == "playing":
+            mode = "轨迹执行"
         link = "手机已连接" if state["connected"] else "等待手机连接"
         calibration = "已校准" if state["calibrated"] else "未校准"
         interruption = " · 上次示教已中断" if state["interrupted"] else ""
         uploaded = state["uploaded_trajectory"]
-        upload_detail = f"\n最近收到的轨迹 {uploaded.name[:60]}（{len(uploaded.points)} 点）" if uploaded else ""
+        upload_detail = ""
+        if uploaded:
+            playback = {"playing": "执行中", "completed": "已完成", "stopped": "已停止"}[state["playback_state"]]
+            upload_detail = f"\n最近收到的轨迹 {uploaded.name[:60]}（{len(uploaded.points)} 点） · {playback}"
         self.status.set(f"{self.port.get()} · {link} · {calibration} · {mode}{interruption}")
         self.details.set(
             f"位置 ({pose.x}, {pose.y}) mm    车身 {pose.yaw / 100:.1f}°    "
@@ -192,7 +203,16 @@ class SimulatorWindow:
             )
             return
         state = self.snapshot
-        all_points = list(state["continuous"]) + list(state["waypoints"]) + list(state["push"]) + [state["pose"]]
+        uploaded = state["uploaded_trajectory"]
+        paths = (
+            (state["continuous"], "#61d4df", False),
+            (state["waypoints"], "#ffcf7b", True),
+            (state["push"], "#bd99ff", False),
+            (uploaded.points if uploaded else (), "#7be6a8", False),
+        )
+        all_points = [state["pose"]]
+        for points, _, _ in paths:
+            all_points.extend(points)
         xs = [point.x for point in all_points] + [0]
         ys = [point.y for point in all_points] + [0]
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
@@ -213,16 +233,19 @@ class SimulatorWindow:
         canvas.create_line(ox - 6, oy, ox + 6, oy, fill="#a7bcc7")
         canvas.create_line(ox, oy - 6, ox, oy + 6, fill="#a7bcc7")
         canvas.create_text(ox + 8, oy + 12, text="0", fill="#a7bcc7")
-        for key, color in (("continuous", "#61d4df"), ("waypoints", "#ffcf7b"), ("push", "#bd99ff")):
-            points = state[key]
+        for points, color, show_indices in paths:
             coords = [value for point in points for value in screen(point.x, point.y)]
             if len(points) > 1:
                 canvas.create_line(*coords, fill=color, width=2)
-            if key == "waypoints":
+            if show_indices:
                 for index, point in enumerate(points, 1):
                     x, y = screen(point.x, point.y)
                     canvas.create_oval(x - 9, y - 9, x + 9, y + 9, fill=color, outline="")
                     canvas.create_text(x, y, text=str(index), fill="#17232a")
+        if uploaded and len(uploaded.points) == 1:
+            target = uploaded.points[0]
+            tx, ty = screen(target.x, target.y)
+            canvas.create_oval(tx - 6, ty - 6, tx + 6, ty + 6, outline="#7be6a8", width=2)
         pose = state["pose"]
         x, y = screen(pose.x, pose.y)
         angle = math.radians(pose.yaw / 100)

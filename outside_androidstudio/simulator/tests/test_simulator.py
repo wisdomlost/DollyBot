@@ -1,3 +1,5 @@
+from contextlib import contextmanager, redirect_stdout
+import io
 import struct
 import unittest
 from unittest.mock import patch
@@ -83,6 +85,17 @@ class SimulatorTests(unittest.TestCase):
         self.seq += 1
         return self.car.handle(p.Packet(kind, self.seq, 123, data), now)
 
+    def stage_trajectory(self, points, kind=1):
+        name = b"route"
+        poses = b"".join(
+            p.POSE_DATA.pack(point.t_ms, point.frame_id, point.x, point.y, point.yaw,
+                             point.gimbal_yaw, point.gimbal_pitch)
+            for point in points
+        )
+        self.send(p.TRAJECTORY_BEGIN, p.TRAJECTORY_HEADER.pack(kind, 0, len(name), len(points)),
+                  now=self.car.now)
+        self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(0) + name + poses, now=self.car.now)
+
     def test_calibration_retry_is_idempotent_and_new_session_rejects_old_frames(self):
         request = p.Packet(p.CALIBRATE, 50, 123)
         first = self.car.handle(request, 0)
@@ -95,7 +108,7 @@ class SimulatorTests(unittest.TestCase):
     def test_motion_deadman_and_gimbal_hold(self):
         self.send(p.MOTION, struct.pack("<hhh", 500, 1000, 0))
         self.send(p.GIMBAL, struct.pack("<hh", 3000, -1500))
-        self.car.advance(0.2)
+        self.send(p.PING, now=0.2)
         self.assertAlmostEqual(20, self.car.x)
         self.assertAlmostEqual(40, self.car.y)
         self.car.advance(1.0)
@@ -161,6 +174,7 @@ class SimulatorTests(unittest.TestCase):
         self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(259) + pose * 11)
         self.assertEqual(p.BAD_ARGUMENT, p.ACK_DATA.unpack(self.send(p.TRAJECTORY_COMMIT)[0].payload)[1])
         self.assertIsNone(self.car.uploaded_trajectory)
+        self.assertIsNone(self.car.playback)
         self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(501) + pose)
         commit = p.Packet(p.TRAJECTORY_COMMIT, 51, 123)
         reply = self.car.handle(commit, 0)
@@ -185,6 +199,85 @@ class SimulatorTests(unittest.TestCase):
         reply = self.car.handle(p.Packet(p.TRAJECTORY_COMMIT, 2, 456), 0)[0]
         self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(reply.payload)[1])
         self.assertIs(completed, self.car.uploaded_trajectory)
+
+    def test_continuous_playback_reaches_first_pose_then_uses_recorded_time_and_shortest_turn(self):
+        self.car.yaw = 170
+        first = Pose(0xFFFFFF00, 54, 100, 0, 17000, 2000, -1000)
+        last = Pose(744, 54, 300, 100, -17000, 6000, 1000)
+        self.stage_trajectory((first, last))
+        commit = p.Packet(p.TRAJECTORY_COMMIT, 50, 123)
+        replies = self.car.handle(commit, 0)
+        self.assertEqual(replies, self.car.handle(commit, 0.25))
+        self.assertEqual(Pose(250, self.car.frame_id, 50, 0, 17000, 1000, -500), self.car.pose())
+        self.car.advance(0.5)
+        self.assertEqual(Pose(500, self.car.frame_id, 100, 0, 17000, 2000, -1000), self.car.pose())
+        self.car.advance(1.0)
+        self.assertEqual(Pose(1000, self.car.frame_id, 200, 50, -18000, 4000, 0), self.car.pose())
+        self.assertEqual("playing", self.car.playback_state)
+        self.car.advance(1.5)
+        expected = Pose(1500, self.car.frame_id, 300, 100, -17000, 6000, 1000)
+        self.assertEqual(expected, self.car.pose())
+        self.assertEqual("completed", self.car.playback_state)
+        self.car.advance(2.0)
+        self.assertEqual((300, 100, -170.0, 6000, 1000),
+                         (self.car.x, self.car.y, self.car.yaw, self.car.gimbal_yaw, self.car.gimbal_pitch))
+
+    def test_waypoints_use_distance_and_turn_instead_of_recording_intervals(self):
+        first = self.car.pose()
+        middle = Pose(100, first.frame_id, 200, 0, 0, 6000, 1000)
+        last = Pose(101, first.frame_id, 200, 0, 9000, 9000, 2000)
+        self.stage_trajectory((first, middle, last), kind=2)
+        self.send(p.TRAJECTORY_COMMIT)
+        self.car.advance(0.5)
+        self.assertEqual(Pose(500, first.frame_id, 100, 0, 0, 3000, 500), self.car.pose())
+        self.car.advance(1.5)
+        self.assertEqual(Pose(1500, first.frame_id, 200, 0, 4500, 7500, 1500), self.car.pose())
+        self.car.advance(2)
+        self.assertEqual(Pose(2000, first.frame_id, 200, 0, 9000, 9000, 2000), self.car.pose())
+        self.assertEqual("completed", self.car.playback_state)
+
+    def test_stop_discards_pending_transfer_and_freezes_playback(self):
+        first = self.car.pose()
+        points = (first, Pose(5000, first.frame_id, 1000, 0, 0, 0, 0))
+        self.stage_trajectory(points)
+        self.send(p.TRAJECTORY_COMMIT)
+        self.car.advance(0.5)
+        self.stage_trajectory(points)
+        self.send(p.STOP, now=0.5)
+        self.assertEqual("stopped", self.car.playback_state)
+        self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(self.send(p.TRAJECTORY_COMMIT, now=0.5)[0].payload)[1])
+        self.car.advance(2)
+        self.assertEqual(100, self.car.pose().x)
+
+    def test_manual_commands_and_connection_loss_stop_playback(self):
+        cases = (
+            (p.MOTION, struct.pack("<hhh", 0, 200, 0), 123, 0.5, 100),
+            (p.GIMBAL, struct.pack("<hh", 2500, -1500), 123, 0.5, 100),
+            (p.HELLO, b"", 456, 0.5, 100),
+            (p.PING, b"", 123, 3.5, 600),
+        )
+        for kind, payload, session, now, expected_x in cases:
+            with self.subTest(kind=kind):
+                self.setUp()
+                first = self.car.pose()
+                self.stage_trajectory((first, Pose(5000, first.frame_id, 1000, 0, 0, 0, 0)))
+                self.send(p.TRAJECTORY_COMMIT)
+                self.car.handle(p.Packet(kind, 50, session, payload), now)
+                self.assertEqual("stopped", self.car.playback_state)
+                self.car.advance(now + 0.5)
+                self.assertEqual(expected_x, self.car.pose().x)
+
+    def test_recording_and_calibration_do_not_overlap_playback(self):
+        first = self.car.pose()
+        self.stage_trajectory((first, Pose(5000, first.frame_id, 1000, 0, 0, 0, 0)))
+        begin_teaching = struct.pack("<BI", 1, first.frame_id)
+        self.send(p.TEACH_BEGIN, begin_teaching)
+        self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(self.send(p.TRAJECTORY_COMMIT)[0].payload)[1])
+        self.assertIsNone(self.car.playback)
+        self.send(p.TEACH_END, struct.pack("<I", self.car.teach_id))
+        self.send(p.TRAJECTORY_COMMIT)
+        self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(self.send(p.CALIBRATE)[0].payload)[1])
+        self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(self.send(p.TEACH_BEGIN, begin_teaching)[0].payload)[1])
 
     def test_push_begin_and_end_have_full_samples_and_idempotent_replies(self):
         begin = p.Packet(p.TEACH_BEGIN, 30, 123, struct.pack("<BI", 3, self.car.frame_id))
@@ -255,7 +348,8 @@ class SerialWorkerTests(unittest.TestCase):
     def test_push_at_100ms_over_byte_stream(self):
         self.record_over_byte_stream(3, 100)
 
-    def record_over_byte_stream(self, mode, interval_ms):
+    @contextmanager
+    def open_worker(self, interval_ms):
         class Port:
             in_waiting = 0
 
@@ -286,44 +380,76 @@ class SerialWorkerTests(unittest.TestCase):
         decoder = p.Decoder()
         received = []
 
-        def wait_for(kind, seq):
+        def wait_for(kind, seq=None, accept=lambda item: True):
             end = time.monotonic() + 2
             while time.monotonic() < end:
+                match = next((item for item in received if item.kind == kind and
+                              (seq is None or item.seq == seq) and accept(item)), None)
+                if match:
+                    return match
                 try:
                     received.extend(decoder.feed(port.outgoing.get(timeout=0.1)))
                 except queue.Empty:
                     continue
-                match = next((item for item in received if item.kind == kind and item.seq == seq), None)
-                if match:
-                    return match
             self.fail(f"Missing reply {kind:02x}/{seq}")
 
-        with patch("simulator.app.serial.Serial", return_value=port):
+        terminal = io.StringIO()
+        with patch("simulator.app.serial.Serial", return_value=port), redirect_stdout(terminal):
             worker = SerialWorker("TEST", interval_ms)
             try:
-                port.incoming.put(p.Packet(p.HELLO, 1, 99).encode())
-                wait_for(p.ACK, 1)
-                port.incoming.put(p.Packet(p.CALIBRATE, 2, 99).encode())
-                frame_id = p.ACK_DATA.unpack(wait_for(p.ACK, 2).payload)[2]
-                port.incoming.put(p.Packet(p.TEACH_BEGIN, 3, 99, struct.pack("<BI", mode, frame_id)).encode())
-                teach_id = p.ACK_DATA.unpack(wait_for(p.ACK, 3).payload)[2]
-                port.incoming.put(p.Packet(p.MOTION, 4, 99, struct.pack("<hhh", 500, 0, 0)).encode())
-                time.sleep(0.25)
-                port.incoming.put(p.Packet(p.TEACH_END, 5, 99, struct.pack("<I", teach_id)).encode())
-                count = p.ACK_DATA.unpack(wait_for(p.ACK, 5).payload)[2]
-                samples = [p.STATUS_DATA.unpack(item.payload) for item in received if item.kind == p.STATUS]
-                samples = [item for item in samples if item[7] == mode and item[9] == teach_id]
-                self.assertEqual(count, len(samples))
-                self.assertGreater(samples[-1][2], samples[0][2])
-                self.assertEqual(list(range(1, count + 1)), [item[10] for item in samples])
-                self.assertGreaterEqual(count, 3)
-                if mode == 3:
-                    self.assertGreater(samples[-1][4], samples[0][4])
-                    self.assertNotEqual(samples[-1][5:7], samples[0][5:7])
+                yield port, wait_for, received, terminal
             finally:
                 worker.close()
                 worker.thread.join(timeout=1)
                 self.assertFalse(worker.thread.is_alive())
+
+    def record_over_byte_stream(self, mode, interval_ms):
+        with self.open_worker(interval_ms) as (port, wait_for, received, _):
+            port.incoming.put(p.Packet(p.HELLO, 1, 99).encode())
+            wait_for(p.ACK, 1)
+            port.incoming.put(p.Packet(p.CALIBRATE, 2, 99).encode())
+            frame_id = p.ACK_DATA.unpack(wait_for(p.ACK, 2).payload)[2]
+            port.incoming.put(p.Packet(p.TEACH_BEGIN, 3, 99, struct.pack("<BI", mode, frame_id)).encode())
+            teach_id = p.ACK_DATA.unpack(wait_for(p.ACK, 3).payload)[2]
+            port.incoming.put(p.Packet(p.MOTION, 4, 99, struct.pack("<hhh", 500, 0, 0)).encode())
+            time.sleep(0.25)
+            port.incoming.put(p.Packet(p.TEACH_END, 5, 99, struct.pack("<I", teach_id)).encode())
+            count = p.ACK_DATA.unpack(wait_for(p.ACK, 5).payload)[2]
+            samples = [p.STATUS_DATA.unpack(item.payload) for item in received if item.kind == p.STATUS]
+            samples = [item for item in samples if item[7] == mode and item[9] == teach_id]
+            self.assertEqual(count, len(samples))
+            self.assertGreater(samples[-1][2], samples[0][2])
+            self.assertEqual(list(range(1, count + 1)), [item[10] for item in samples])
+            self.assertGreaterEqual(count, 3)
+            if mode == 3:
+                self.assertGreater(samples[-1][4], samples[0][4])
+                self.assertNotEqual(samples[-1][5:7], samples[0][5:7])
+
+    def test_worker_logs_received_frames_and_reports_uploaded_final_pose(self):
+        name = b"route"
+        target = (40, 20, 9000, 3000, -1500)
+        poses = p.POSE_DATA.pack(0, 1, 0, 0, 0, 0, 0) + p.POSE_DATA.pack(200, 1, *target)
+        packets = (
+            p.Packet(p.HELLO, 1, 99),
+            p.Packet(p.TRAJECTORY_BEGIN, 2, 99, p.TRAJECTORY_HEADER.pack(1, 0, len(name), 2)),
+            p.Packet(p.TRAJECTORY_DATA, 3, 99, p.TRAJECTORY_OFFSET.pack(0) + name),
+            p.Packet(p.TRAJECTORY_DATA, 4, 99, p.TRAJECTORY_OFFSET.pack(len(name)) + poses),
+            p.Packet(p.TRAJECTORY_COMMIT, 5, 99),
+        )
+        with self.open_worker(50) as (port, wait_for, _, terminal):
+            for packet in packets:
+                frame = packet.encode()
+                port.incoming.put(frame[:7])
+                port.incoming.put(frame[7:])
+                self.assertEqual(p.OK, p.ACK_DATA.unpack(wait_for(p.ACK, packet.seq).payload)[1])
+            ack = p.ACK_DATA.unpack(wait_for(p.ACK, 5).payload)
+            self.assertEqual((p.TRAJECTORY_COMMIT, p.OK, 2), ack)
+            wait_for(p.STATUS, accept=lambda item: p.STATUS_DATA.unpack(item.payload)[2:7] == target)
+            log = terminal.getvalue().splitlines()
+            self.assertEqual(len(packets), len(log))
+            for packet, line in zip(packets, log):
+                self.assertIn(f"type=0x{packet.kind:02X} seq={packet.seq} session=0x00000063", line)
+                self.assertTrue(line.endswith(packet.encode().hex(" ").upper()))
 
 
 if __name__ == "__main__":
