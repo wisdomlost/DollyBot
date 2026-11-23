@@ -26,7 +26,7 @@
     <string name="command_bad_state">模拟车当前状态不允许此操作</string>
     <string name="command_bad_argument">指令参数超出允许范围</string>
     <string name="command_frame_mismatch">坐标参考系已变化，请重新校准</string>
-    <string name="command_unsupported">模拟车不支持此命令或协议版本</string>
+    <string name="command_unsupported">设备不支持此命令或协议版本</string>
     <string name="command_timeout">指令未收到确认，请检查蓝牙连接</string>
     <string name="teaching_finished">已结束</string>
     <string name="teaching_interrupted">已中断</string>
@@ -157,6 +157,12 @@
     <string name="my_trajectories">我的轨迹</string>
     <string name="no_example_trajectories">暂无示例轨迹</string>
     <string name="no_saved_trajectories">暂无已保存的轨迹</string>
+    <string name="send_trajectory">下发</string>
+    <string name="trajectory_send_connect">连接蓝牙设备后即可下发轨迹</string>
+    <string name="trajectory_sending">下发中 · %1$d/%2$d 点</string>
+    <string name="trajectory_sent">下发成功</string>
+    <string name="trajectory_send_failed">下发失败：%1$s</string>
+    <string name="trajectory_send_invalid_confirmation">设备确认的轨迹点数有误</string>
     <string name="choose_recording_mode">选择录制模式</string>
     <string name="finishing_recording">正在结束</string>
     <string name="save_recorded_trajectory">保存轨迹</string>

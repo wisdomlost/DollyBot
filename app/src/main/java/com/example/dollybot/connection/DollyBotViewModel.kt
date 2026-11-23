@@ -24,6 +24,7 @@ import com.example.dollybot.ui.TeachingPhase
 import com.example.dollybot.ui.TeachingRun
 import com.example.dollybot.ui.TeachingUiState
 import com.example.dollybot.ui.TrajectoryKind
+import com.example.dollybot.ui.TrajectoryUploadUiState
 import com.example.dollybot.ui.RecordingStage
 import com.example.dollybot.ui.RecordingMode
 import com.example.dollybot.ui.RecordingUiState
@@ -518,6 +519,35 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                 mutableState.update { it.copy(recording = it.recording.copy(
                     busy = false, message = text(R.string.storage_failed)
                 )) }
+            }
+        }
+    }
+
+    override fun sendTrajectory(id: String) {
+        val current = state.value
+        if (current.device.connection != ConnectionStatus.Connected || current.trajectoryUpload?.sending == true) return
+        val trajectory = current.trajectories.firstOrNull {
+            it.id == id && !it.isDraft && it.points.isNotEmpty()
+        } ?: return
+        val uploadSession = session
+        val upload = TrajectoryUploadUiState(id, trajectory.updatedAt, trajectory.points.size)
+        mutableState.update { it.copy(trajectoryUpload = upload) }
+        viewModelScope.launch {
+            val error = try {
+                uploadTrajectory(trajectory, send = { type, data ->
+                    if (session != uploadSession || link == null) throw IOException(text(R.string.disconnected))
+                    ackValue(request(type, data))
+                }, onProgress = { sent ->
+                    mutableState.update { it.copy(trajectoryUpload = it.trajectoryUpload?.copy(sentPoints = sent)) }
+                })
+                null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                error.message ?: text(R.string.trajectory_send_invalid_confirmation)
+            }
+            mutableState.update {
+                it.copy(trajectoryUpload = it.trajectoryUpload?.copy(sending = false, error = error))
             }
         }
     }

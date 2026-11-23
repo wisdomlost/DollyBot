@@ -1,5 +1,6 @@
 package com.example.dollybot.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -43,9 +45,12 @@ internal fun TrajectoryListScreen(
     onSourceChange: (Boolean) -> Unit,
     onKindChange: (TrajectoryKind) -> Unit,
     onSelect: (SavedTrajectory) -> Unit,
+    onSend: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val trajectories = if (examples) emptyList() else state.trajectories.filter { it.kind == kind }
+    val trajectories = if (examples) emptyList() else state.trajectories.filter { it.kind == kind && !it.isDraft }
+    val connected = state.device.connection == ConnectionStatus.Connected
+    val upload = state.trajectoryUpload
     Column(modifier.fillMaxSize()) {
         PrimaryTabRow(selectedTabIndex = if (examples) 0 else 1, containerColor = MaterialTheme.colorScheme.surface) {
             Tab(selected = examples, onClick = { onSourceChange(true) },
@@ -71,6 +76,14 @@ internal fun TrajectoryListScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (trajectories.isNotEmpty() && !connected) {
+            Text(
+                stringResource(R.string.trajectory_send_connect),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -78,34 +91,63 @@ internal fun TrajectoryListScreen(
         ) {
             items(trajectories, key = { it.id }) { trajectory ->
                 Surface(
-                    onClick = { onSelect(trajectory) },
                     shape = MaterialTheme.shapes.large,
                     color = MaterialTheme.colorScheme.surface
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(trajectory.name, style = MaterialTheme.typography.titleMedium,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            val details = if (kind == TrajectoryKind.Continuous) {
-                                val timeline = remember(trajectory) { PreviewTimeline(trajectory) }
-                                formatPreviewTime(timeline.durationMs)
-                            } else stringResource(R.string.waypoint_count, trajectory.points.size)
-                            Text(
-                                details + " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                                    .format(Date(trajectory.updatedAt)),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (trajectory.incomplete) {
-                                Text(stringResource(R.string.incomplete_trajectory),
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.labelSmall)
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { onSelect(trajectory) }.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(trajectory.name, style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                val details = if (kind == TrajectoryKind.Continuous) {
+                                    val timeline = remember(trajectory) { PreviewTimeline(trajectory) }
+                                    formatPreviewTime(timeline.durationMs)
+                                } else stringResource(R.string.waypoint_count, trajectory.points.size)
+                                Text(
+                                    details + " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                                        .format(Date(trajectory.updatedAt)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (trajectory.incomplete) {
+                                    Text(stringResource(R.string.incomplete_trajectory),
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelSmall)
+                                }
                             }
+                            Chevron()
                         }
-                        Chevron()
+                        val transfer = upload?.takeIf {
+                            it.trajectoryId == trajectory.id && (it.sending || it.updatedAt == trajectory.updatedAt)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                        ) {
+                            val status = when {
+                                transfer == null -> null
+                                transfer.sending -> stringResource(
+                                    R.string.trajectory_sending, transfer.sentPoints, transfer.totalPoints
+                                )
+                                transfer.error != null -> stringResource(R.string.trajectory_send_failed, transfer.error)
+                                else -> stringResource(R.string.trajectory_sent)
+                            }
+                            if (status != null) {
+                                Text(
+                                    status, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                                    color = if (transfer?.error != null) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(
+                                onClick = { onSend(trajectory.id) },
+                                enabled = connected && upload?.sending != true && trajectory.points.isNotEmpty()
+                            ) { Text(stringResource(R.string.send_trajectory)) }
+                        }
                     }
                 }
             }

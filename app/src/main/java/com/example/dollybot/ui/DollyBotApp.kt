@@ -226,6 +226,7 @@ private fun DollyBotNavigation(state: DollyBotUiState, actions: DollyBotActions,
                 Page.Trajectories -> TrajectoryListScreen(
                     state = state, examples = examples, kind = libraryKind,
                     onSourceChange = { examples = it }, onKindChange = { libraryKind = it },
+                    onSend = actions::sendTrajectory,
                     onSelect = {
                         selectedId = it.id
                         actions.openTrajectory(it.id)

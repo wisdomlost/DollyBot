@@ -3,7 +3,9 @@ package com.example.dollybot
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -24,9 +26,14 @@ import com.example.dollybot.connection.LivePose
 import com.example.dollybot.trajectory.SavedTrajectory
 import com.example.dollybot.trajectory.StoredPose
 import com.example.dollybot.trajectory.TrajectoryStore
+import com.example.dollybot.ui.ConnectionStatus
+import com.example.dollybot.ui.DeviceUiState
+import com.example.dollybot.ui.DollyBotActions
 import com.example.dollybot.ui.DollyBotApp
+import com.example.dollybot.ui.DollyBotUiState
 import com.example.dollybot.ui.RecordingStage
 import com.example.dollybot.ui.TrajectoryKind
+import com.example.dollybot.ui.TrajectoryUploadUiState
 import com.example.dollybot.ui.theme.DollybotTheme
 import java.util.UUID
 import org.junit.After
@@ -142,6 +149,41 @@ class DollyBotNavigationTest {
         compose.waitUntil(5000) { model.state.value.trajectories.isEmpty() }
         compose.onNodeWithText("暂无已保存的轨迹").assertIsDisplayed()
         assertTrue(repository.all().isEmpty())
+    }
+
+    @Test
+    fun savedTrajectoryCanBeSentAfterBluetoothConnects() {
+        val saved = trajectory(TrajectoryKind.Continuous)
+        val state = mutableStateOf(DollyBotUiState(trajectories = listOf(saved)))
+        var sentId: String? = null
+        val actions = object : DollyBotActions {
+            override fun sendTrajectory(id: String) {
+                sentId = id
+                state.value = state.value.copy(
+                    trajectoryUpload = TrajectoryUploadUiState(id, saved.updatedAt, 3, sentPoints = 2)
+                )
+            }
+        }
+        compose.runOnUiThread {
+            compose.activity.setContent { DollybotTheme { DollyBotApp(state.value, actions) } }
+        }
+        compose.onNodeWithText("轨迹").performClick()
+        compose.onNodeWithText("下发").assertIsNotEnabled()
+        compose.onNodeWithText("连接蓝牙设备后即可下发轨迹").assertIsDisplayed()
+        compose.runOnIdle {
+            state.value = state.value.copy(device = DeviceUiState(connection = ConnectionStatus.Connected))
+        }
+        compose.onNodeWithText("下发").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(saved.id, sentId) }
+        compose.onNodeWithText("下发中 · 2/3 点").assertIsDisplayed()
+        compose.onNodeWithText("下发").assertIsNotEnabled()
+        compose.runOnIdle {
+            state.value = state.value.copy(trajectoryUpload = state.value.trajectoryUpload?.copy(
+                sentPoints = 3, sending = false
+            ))
+        }
+        compose.onNodeWithText("下发成功").assertIsDisplayed()
+        compose.onNodeWithText("下发").assertIsEnabled()
     }
 
     @Test

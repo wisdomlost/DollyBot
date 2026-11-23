@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
             override fun setControlPageActive(active: Boolean) = session.setControlPageActive(active)
             override fun selectRecordingMode(mode: RecordingMode) = session.selectRecordingMode(mode)
             override fun startRecording(mode: RecordingMode) = session.startRecording(mode)
+            override fun sendTrajectory(id: String) = session.sendTrajectory(id)
             override fun refreshDevices() = withBluetoothPermission { session.refreshDevices() }
             @SuppressLint("MissingPermission")
             override fun connect() = withBluetoothPermission {

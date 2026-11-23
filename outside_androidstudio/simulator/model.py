@@ -1,7 +1,7 @@
 """Single-threaded virtual car and teaching state machine."""
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 import struct
 
@@ -17,6 +17,27 @@ class Pose:
     yaw: int
     gimbal_yaw: int
     gimbal_pitch: int
+
+
+@dataclass(frozen=True)
+class UploadedTrajectory:
+    name: str
+    kind: int
+    incomplete: bool
+    points: tuple[Pose, ...]
+
+
+@dataclass
+class TrajectoryTransfer:
+    kind: int
+    incomplete: bool
+    name_length: int
+    point_count: int
+    data: bytearray = field(default_factory=bytearray)
+
+    @property
+    def size(self):
+        return self.name_length + self.point_count * p.POSE_DATA.size
 
 
 class StatusSchedule:
@@ -66,6 +87,8 @@ class Simulator:
         self.interrupted = False
         self.status_seq = 0
         self.cache = OrderedDict()
+        self.trajectory_transfer = None
+        self.uploaded_trajectory = None
 
     def advance(self, now: float):
         if now < self.now:
@@ -106,6 +129,7 @@ class Simulator:
         self.mode = 0
         self.motion = (0, 0, 0)
         self.connected = False
+        self.trajectory_transfer = None
 
     def pose(self) -> Pose:
         return Pose(
@@ -244,4 +268,37 @@ class Simulator:
                 pose.yaw, pose.gimbal_yaw, pose.gimbal_pitch
             )
             return [p.Packet(p.POINT, request.seq, self.session, payload)]
+        if kind == p.TRAJECTORY_BEGIN:
+            trajectory_kind, flags, name_length, point_count = p.TRAJECTORY_HEADER.unpack(data)
+            transfer = TrajectoryTransfer(trajectory_kind, bool(flags & 1), name_length, point_count)
+            if trajectory_kind not in (1, 2) or flags > 1 or not name_length or not point_count or transfer.size > 0xFFFFFFFF:
+                raise ValueError("Invalid trajectory header")
+            self.trajectory_transfer = transfer
+            return [self._ack(request)]
+        if kind in (p.TRAJECTORY_DATA, p.TRAJECTORY_COMMIT):
+            return [self._receive_trajectory(request)]
         return [self._ack(request, p.UNSUPPORTED)]
+
+    def _receive_trajectory(self, request: p.Packet) -> p.Packet:
+        transfer = self.trajectory_transfer
+        if transfer is None:
+            return self._ack(request, p.BAD_STATE)
+        data = request.payload
+        if request.kind == p.TRAJECTORY_DATA:
+            offset, = p.TRAJECTORY_OFFSET.unpack_from(data)
+            chunk = data[p.TRAJECTORY_OFFSET.size:]
+            if not chunk or offset != len(transfer.data) or offset + len(chunk) > transfer.size:
+                raise ValueError("Invalid trajectory chunk")
+            transfer.data.extend(chunk)
+            return self._ack(request)
+
+        if data or len(transfer.data) != transfer.size:
+            raise ValueError("Incomplete trajectory")
+        name = transfer.data[:transfer.name_length].decode("utf-8")
+        if not name.strip():
+            raise ValueError("Empty trajectory name")
+        pose_bytes = memoryview(transfer.data)[transfer.name_length:]
+        points = tuple(Pose(*values) for values in p.POSE_DATA.iter_unpack(pose_bytes))
+        self.uploaded_trajectory = UploadedTrajectory(name, transfer.kind, transfer.incomplete, points)
+        self.trajectory_transfer = None
+        return self._ack(request, value=len(points))

@@ -68,6 +68,7 @@ class SerialWorker:
                             "continuous": tuple(model.histories[1]),
                             "waypoints": tuple(model.histories[2]),
                             "push": tuple(model.histories[3]),
+                            "uploaded_trajectory": model.uploaded_trajectory,
                             "errors": decoder.errors,
                         })
                     self.stop_event.wait(max(0.0, 0.02 - (time.monotonic() - tick_started)))
@@ -167,13 +168,15 @@ class SimulatorWindow:
         link = "手机已连接" if state["connected"] else "等待手机连接"
         calibration = "已校准" if state["calibrated"] else "未校准"
         interruption = " · 上次示教已中断" if state["interrupted"] else ""
+        uploaded = state["uploaded_trajectory"]
+        upload_detail = f"\n最近收到的轨迹 {uploaded.name[:60]}（{len(uploaded.points)} 点）" if uploaded else ""
         self.status.set(f"{self.port.get()} · {link} · {calibration} · {mode}{interruption}")
         self.details.set(
             f"位置 ({pose.x}, {pose.y}) mm    车身 {pose.yaw / 100:.1f}°    "
             f"云台 {pose.gimbal_yaw / 100:.1f}° / {pose.gimbal_pitch / 100:.1f}°\n"
             f"连续采样 {len(state['continuous'])}    关键点 {len(state['waypoints'])}    "
             f"推车采样 {len(state['push'])}    周期 {self.interval.get()} ms    "
-            f"CRC/长度错误 {state['errors']}"
+            f"CRC/长度错误 {state['errors']}{upload_detail}"
         )
 
     def draw(self):

@@ -1,11 +1,18 @@
 package com.example.dollybot
 
 import com.example.dollybot.connection.CarStatus
+import com.example.dollybot.connection.LivePose
 import com.example.dollybot.connection.Packet
 import com.example.dollybot.connection.PacketDecoder
 import com.example.dollybot.connection.TeachingPoint
 import com.example.dollybot.connection.Wire
 import com.example.dollybot.connection.crc16
+import com.example.dollybot.connection.uploadTrajectory
+import com.example.dollybot.trajectory.SavedTrajectory
+import com.example.dollybot.trajectory.StoredPose
+import com.example.dollybot.ui.TrajectoryKind
+import java.io.IOException
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -88,5 +95,44 @@ class ProtocolTest {
         val frame = Packet(Wire.HELLO, 1, 1, version = 2).encode()
         val result = PacketDecoder().feed(invalid + frame).single()
         assertEquals(2, result.version)
+    }
+
+    @Test
+    fun trajectoryUploadPreservesLongUtf8NameAndAllPoseFieldsAcrossPackets() = runBlocking {
+        val pose = LivePose(0xFFFFFFFFL, 0xFEDCBA98L, -120, 300, 90f, 30f, -15f)
+        val points = List(12) { StoredPose("point-$it", pose.copy(xMm = pose.xMm + it)) }
+        val trajectory = SavedTrajectory("route", "A" + "轨".repeat(86), TrajectoryKind.Waypoints,
+            0, 0, points, incomplete = true)
+        val frames = mutableListOf<Packet>()
+        val progress = mutableListOf<Int>()
+
+        uploadTrajectory(trajectory, send = { type, data ->
+            val packet = Packet(type, frames.size + 1, 123, data)
+            frames += PacketDecoder().feed(packet.encode()).single()
+            if (type == Wire.TRAJECTORY_COMMIT) 12L else 0L
+        }, onProgress = { progress.add(it) })
+
+        assertEquals(listOf(0x40, 0x41, 0x41, 0x41, 0x41, 0x42), frames.map { it.type })
+        assertArrayEquals(bytes("02 01 03 01 00 00 0C 00 00 00"), frames.first().payload)
+        assertEquals(listOf(0, 252, 259, 501), frames.subList(1, 5).map { Wire.read(it.payload).int })
+        val name = frames[1].payload.drop(4) + frames[2].payload.drop(4)
+        assertEquals(trajectory.name, name.toByteArray().toString(Charsets.UTF_8))
+        assertArrayEquals(
+            bytes("FF FF FF FF 98 BA DC FE 88 FF FF FF 2C 01 00 00 28 23 B8 0B 24 FA"),
+            frames[3].payload.copyOfRange(4, 26)
+        )
+        assertEquals(-109, Wire.read(frames[4].payload).getInt(12))
+        assertEquals(listOf(11, 12), progress)
+    }
+
+    @Test
+    fun trajectoryUploadRejectsMissingOrWrongReceiverCount() {
+        val pose = LivePose(0, 1, 0, 0, 0f, 0f, 0f)
+        val saved = SavedTrajectory("route", "一号", TrajectoryKind.Continuous, 0, 0,
+            listOf(StoredPose("point", pose)))
+
+        assertThrows(IOException::class.java) {
+            runBlocking { uploadTrajectory(saved, send = { _, _ -> 0L }, onProgress = {}) }
+        }
     }
 }

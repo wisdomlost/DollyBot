@@ -74,6 +74,9 @@ A5 5A | VER:u8 | TYPE:u8 | SEQ:u16 | LEN:u16 | SESSION:u32 | PAYLOAD | CRC:u16
 | 30 TEACH_BEGIN | 手机到电脑 | mode:u8, frame_id:u32 |
 | 31 TEACH_END | 手机到电脑 | teach_id:u32 |
 | 32 TAKE_POINT | 手机到电脑 | teach_id:u32 |
+| 40 TRAJECTORY_BEGIN | 手机到电脑 | kind:u8, flags:u8, name_bytes:u32, point_count:u32 |
+| 41 TRAJECTORY_DATA | 手机到电脑 | offset:u32, data:1–252 字节 |
+| 42 TRAJECTORY_COMMIT | 手机到电脑 | 空 |
 | 80 ACK | 电脑到手机 | request_type:u8, result:u8, value:u32 |
 | 90 STATUS | 电脑到手机 | 下文定义的 34 字节位姿状态 |
 | 91 POINT | 电脑到手机 | 下文定义的 30 字节取点快照 |
@@ -95,7 +98,9 @@ x_mm:i32, y_mm:i32, yaw:i16, gimbal_yaw:i16, gimbal_pitch:i16
 
 t_ms 是电脑当前连接会话内的单调时间。flags 的 bit0 表示已校准，bit1 表示运动超时停车。连续和推车模式的 point_index 从 1 开始，每个 STATUS 对应一个采样。关键点模式下表示累计取点数，点位数据通过 POINT 返回。
 
-ACK result 为 0 成功、1 状态不允许、2 未校准、3 参数错误、4 坐标系不匹配、5 不支持的命令或版本。value 在校准成功时为 frame_id，开始示教时为 teach_id，结束示教时为最终点数，其他情况为零。取点成功直接返回 POINT，失败返回 ACK。
+ACK result 为 0 成功、1 状态不允许、2 未校准、3 参数错误、4 坐标系不匹配、5 不支持的命令或版本。value 在校准成功时为 frame_id，开始示教时为 teach_id，结束示教或提交轨迹时为最终点数，其他情况为零。取点成功直接返回 POINT，失败返回 ACK。
+
+在 App 的“轨迹 → 我的轨迹”中点击“下发”。轨迹类型 kind 为 1（连续，含推车）或 2（关键点），flags bit0 表示原录制不完整。数据流由 UTF-8 名称和按保存顺序排列的位姿组成。每个位姿为 22 字节，字段与 STATUS 的前 7 个字段相同，保留原采样时间和坐标系。offset 从 0 开始，以数据流字节为单位。名称和点数必须非零，数据总长度最多为 u32 的最大值。接收端确认每帧，收齐并提交后才更新最近收到的轨迹。新下发或会话结束会丢弃未提交数据。模拟车窗口显示最近收到的轨迹及点数，下发只接收数据。
 
 MOTION 与 GIMBAL 成功时不发送 ACK，参数错误时返回 ACK。其他命令等待响应 1 秒，最多重试两次，使用原序号。电脑缓存最近 256 条离散请求的完整响应。
 

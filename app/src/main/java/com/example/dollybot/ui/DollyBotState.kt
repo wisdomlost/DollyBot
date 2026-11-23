@@ -91,6 +91,15 @@ internal data class RecordingUiState(
         )
 }
 
+internal data class TrajectoryUploadUiState(
+    val trajectoryId: String,
+    val updatedAt: Long,
+    val totalPoints: Int,
+    val sentPoints: Int = 0,
+    val sending: Boolean = true,
+    val error: String? = null
+)
+
 internal data class DollyBotUiState(
     val device: DeviceUiState = DeviceUiState(),
     val yawDegrees: Float = 0f,
@@ -99,7 +108,8 @@ internal data class DollyBotUiState(
     val recording: RecordingUiState = RecordingUiState(),
     val trajectories: List<SavedTrajectory> = emptyList(),
     val libraryLoading: Boolean = false,
-    val editor: TrajectoryEditorState? = null
+    val editor: TrajectoryEditorState? = null,
+    val trajectoryUpload: TrajectoryUploadUiState? = null
 )
 
 internal enum class DriveDirection {
@@ -134,6 +144,7 @@ internal interface DollyBotActions {
     fun saveRecording(name: String) = Unit
     fun discardRecording() = Unit
     fun openTrajectory(id: String) = Unit
+    fun sendTrajectory(id: String) = Unit
     fun renameEditedTrajectory(name: String) = Unit
     fun selectEditedPoint(id: String) = Unit
     fun moveEditedPoint(delta: Int) = Unit

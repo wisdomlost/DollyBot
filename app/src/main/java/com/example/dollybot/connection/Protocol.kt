@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 internal object Wire {
+    const val MAX_PAYLOAD = 256
     const val HELLO = 0x01
     const val PING = 0x02
     const val MOTION = 0x10
@@ -13,6 +14,9 @@ internal object Wire {
     const val TEACH_BEGIN = 0x30
     const val TEACH_END = 0x31
     const val TAKE_POINT = 0x32
+    const val TRAJECTORY_BEGIN = 0x40
+    const val TRAJECTORY_DATA = 0x41
+    const val TRAJECTORY_COMMIT = 0x42
     const val ACK = 0x80
     const val STATUS = 0x90
     const val POINT = 0x91
@@ -30,7 +34,7 @@ internal data class Packet(
     val version: Int = 1
 ) {
     fun encode(): ByteArray {
-        require(payload.size <= 256)
+        require(payload.size <= Wire.MAX_PAYLOAD)
         val result = Wire.buffer(14 + payload.size)
         result.put(0xA5.toByte()).put(0x5A).put(version.toByte()).put(type.toByte())
         result.putShort(seq.toShort()).putShort(payload.size.toShort()).putInt(session.toInt())
@@ -70,7 +74,7 @@ internal class PacketDecoder {
             if (buffer.size < 12) break
             val header = Wire.read(buffer)
             val length = header.getShort(6).toInt() and 0xFFFF
-            if (length > 256) {
+            if (length > Wire.MAX_PAYLOAD) {
                 buffer = buffer.copyOfRange(1, buffer.size)
                 continue
             }

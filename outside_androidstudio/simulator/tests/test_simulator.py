@@ -6,7 +6,7 @@ import time
 import math
 
 from simulator import protocol as p
-from simulator.model import Simulator, StatusSchedule
+from simulator.model import Pose, Simulator, StatusSchedule
 from simulator.app import SerialWorker
 
 
@@ -144,6 +144,47 @@ class SimulatorTests(unittest.TestCase):
         self.assertFalse(self.car.connected)
         self.assertTrue(self.car.interrupted)
         self.assertEqual(0, self.car.mode)
+
+    def test_trajectory_is_committed_only_after_all_bytes_and_retries_are_safe(self):
+        name = "A" + "轨" * 86
+        name_bytes = name.encode()
+        pose = bytes.fromhex("ff ff ff ff 98 ba dc fe 88 ff ff ff 2c 01 00 00 28 23 b8 0b 24 fa")
+        begin = bytes.fromhex("02 01 03 01 00 00 0c 00 00 00")
+        self.assertEqual((p.TRAJECTORY_BEGIN, p.OK, 0), p.ACK_DATA.unpack(
+            self.send(p.TRAJECTORY_BEGIN, begin)[0].payload
+        ))
+        self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(0) + name_bytes[:252])
+        data = p.Packet(p.TRAJECTORY_DATA, 50, 123, p.TRAJECTORY_OFFSET.pack(252) + name_bytes[252:])
+        first = self.car.handle(data, 0)
+        self.assertEqual((p.TRAJECTORY_DATA, p.OK, 0), p.ACK_DATA.unpack(first[0].payload))
+        self.assertEqual(first, self.car.handle(data, 0))
+        self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(259) + pose * 11)
+        self.assertEqual(p.BAD_ARGUMENT, p.ACK_DATA.unpack(self.send(p.TRAJECTORY_COMMIT)[0].payload)[1])
+        self.assertIsNone(self.car.uploaded_trajectory)
+        self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(501) + pose)
+        commit = p.Packet(p.TRAJECTORY_COMMIT, 51, 123)
+        reply = self.car.handle(commit, 0)
+        self.assertEqual((p.TRAJECTORY_COMMIT, p.OK, 12), p.ACK_DATA.unpack(reply[0].payload))
+        self.assertEqual(reply, self.car.handle(commit, 0))
+        uploaded = self.car.uploaded_trajectory
+        self.assertEqual((name, 2, True, 12), (uploaded.name, uploaded.kind, uploaded.incomplete, len(uploaded.points)))
+        self.assertEqual(Pose(0xFFFFFFFF, 0xFEDCBA98, -120, 300, 9000, 3000, -1500), uploaded.points[0])
+        self.assertEqual((0, 0, 0), self.car.motion)
+
+    def test_trajectory_new_session_discards_partial_data_and_keeps_last_complete_upload(self):
+        name = b"route"
+        begin = p.TRAJECTORY_HEADER.pack(1, 0, len(name), 1)
+        self.send(p.TRAJECTORY_BEGIN, begin)
+        self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(0) + name + bytes(p.POSE_DATA.size))
+        self.send(p.TRAJECTORY_COMMIT)
+        completed = self.car.uploaded_trajectory
+        self.send(p.TRAJECTORY_BEGIN, begin)
+        reply = self.send(p.TRAJECTORY_DATA, p.TRAJECTORY_OFFSET.pack(1) + name)[0]
+        self.assertEqual(p.BAD_ARGUMENT, p.ACK_DATA.unpack(reply.payload)[1])
+        self.car.handle(p.Packet(p.HELLO, 1, 456), 0)
+        reply = self.car.handle(p.Packet(p.TRAJECTORY_COMMIT, 2, 456), 0)[0]
+        self.assertEqual(p.BAD_STATE, p.ACK_DATA.unpack(reply.payload)[1])
+        self.assertIs(completed, self.car.uploaded_trajectory)
 
     def test_push_begin_and_end_have_full_samples_and_idempotent_replies(self):
         begin = p.Packet(p.TEACH_BEGIN, 30, 123, struct.pack("<BI", 3, self.car.frame_id))
