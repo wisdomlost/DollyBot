@@ -1,0 +1,733 @@
+{
+    "version": "2.0.0",
+    "projectId": "bf26a3375c9e7d44ccd15d9cc7d2818c9d3785f32596a93fda1d53e63900f0ee",
+    "components": {
+        "gge1": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Device": "b42cf6e78ba262ee",
+                "Footprint": "96ede0953fd945cc",
+                "PCB Layer": "Default",
+                "Name": "={Manufacturer Part}",
+                "Designator": "U1",
+                "Symbol": "33af34b4bf2454ce",
+                "Unique ID": "gge1",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I2",
+                "LCSC Part Name": "霍尔在线编程角度位置传感器",
+                "Supplier Part": "C2856764",
+                "Manufacturer": "NOVOSENSE(纳芯微)",
+                "Manufacturer Part": "MT6701CT-STD",
+                "Supplier Footprint": "SOP-8",
+                "JLCPCB Part Class": "Extended Part",
+                "Datasheet": "https://item.szlcsc.com/datasheet/MT6701CT-STD/3056853.html",
+                "Supplier": "LCSC",
+                "3D Model": "75c24a7891ee4dd6bdac16a7163ff87e|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "SOP-8_L4.9-W3.9-P1.27-LS6.0-BL-1",
+                "3D Model Transform": "192.913,236.22,0,0,0,0,-0.393,2.749,0",
+                "Type": "磁性旋转位置传感器",
+                "Interface": "I2C；SSI",
+                "Voltage - Supply": "3.3V~5V",
+                "Rotation Angle": "0°~360°",
+                "Current - Supply": "10mA",
+                "Module": "否",
+                "Length": "5mm",
+                "Width": "3.9mm",
+                "Height": "1.75mm",
+                "Operating Temperature": "-40℃~+125℃",
+                "Features": "故障诊断；可编程传输；零位编程",
+                "Description": "类型:磁性旋转位置传感器;接口类型:I2C；SSI;旋转角度范围:0°~360°;",
+                "DeviceName": "MT6701CT-STD",
+                "FootprintName": "SOP-8_L4.9-W3.9-P1.27-LS6.0-BL"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "VDD",
+                    "number": "1",
+                    "net": "3V3",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "MODE",
+                    "number": "2",
+                    "net": "$1N2",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                },
+                "3": {
+                    "name": "OUT",
+                    "number": "3",
+                    "net": "",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "3"
+                    }
+                },
+                "4": {
+                    "name": "GND",
+                    "number": "4",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "4"
+                    }
+                },
+                "5": {
+                    "name": "PUSH",
+                    "number": "5",
+                    "net": "",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "5"
+                    }
+                },
+                "6": {
+                    "name": "A",
+                    "number": "6",
+                    "net": "ENC_A",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "6"
+                    }
+                },
+                "7": {
+                    "name": "B",
+                    "number": "7",
+                    "net": "ENC_B",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "7"
+                    }
+                },
+                "8": {
+                    "name": "Z",
+                    "number": "8",
+                    "net": "",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "8"
+                    }
+                }
+            }
+        },
+        "gge2": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Device": "a9a81624ddb39641",
+                "Footprint": "4b997ea3ecc59713",
+                "PCB Layer": "Default",
+                "Symbol": "ff59103c6a55d886",
+                "Designator": "CN6",
+                "Name": "={Manufacturer Part}",
+                "Unique ID": "gge2",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I3",
+                "LCSC Part Name": "1x6P 间距:2.54mm 直插 系列:XH",
+                "Supplier Part": "C42391664",
+                "Manufacturer": "hanxia(韩下)",
+                "Manufacturer Part": "HX-XH2.54-6PZZ",
+                "Supplier Footprint": "插件,P=2.5mm",
+                "JLCPCB Part Class": "Extended Part",
+                "Datasheet": "https://item.szlcsc.com/datasheet/HX-XH2.54-6PZZ/44326936.html",
+                "Supplier": "LCSC",
+                "3D Model": "339169ddee9a410aa0e9978eac132787|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "CONN-TH_6P-P2.50_BX-XH2.54-6PZZ",
+                "3D Model Transform": "688.975,232.6767,0,0,0,0,-0.005,18.898,-133.858",
+                "Pins Structure": "1x6P",
+                "Pitch": "2.54mm",
+                "Mounting Type": "直插",
+                "Reference Series": "XH",
+                "Number of Pins": "6P",
+                "Number of Rows": "1",
+                "Number of PINs Per Row": "6",
+                "Row Spacing": "-",
+                "Current Rating": "3A",
+                "Contact Material": "黄铜",
+                "Contact Plating": "锡",
+                "Operating Temperature": "-25℃~+85℃",
+                "Voltage Rating": "250V",
+                "Plastic Material": "PA66",
+                "Flame Retardant Rating": "UL94V-0",
+                "Color": "白色",
+                "Description": "插针结构:1x6P;间距:2.54mm;安装方式:直插;参考系列:XH;总PIN数:6P;排数:1;每排PIN数:6;行距:-;额定电流:3A;触头材质:黄铜;触头镀层:锡;工作温度:-25℃~+85℃;",
+                "DeviceName": "HX-XH2.54-6PZZ",
+                "FootprintName": "CONN-TH_6P-P2.50_BX-XH2.54-6PZZ"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "A",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                },
+                "3": {
+                    "name": "3",
+                    "number": "3",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "3"
+                    }
+                },
+                "4": {
+                    "name": "4",
+                    "number": "4",
+                    "net": "B",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "4"
+                    }
+                },
+                "5": {
+                    "name": "5",
+                    "number": "5",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "5"
+                    }
+                },
+                "6": {
+                    "name": "6",
+                    "number": "6",
+                    "net": "3V3",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "6"
+                    }
+                }
+            }
+        },
+        "gge3": {
+            "props": {
+                "Unique ID": "gge3",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "R1",
+                "Device": "227726d468b8dd82",
+                "Footprint": "bca5ea9c5e8f0ea5",
+                "PCB Layer": "Default",
+                "Symbol": "e2702f28633ad49b",
+                "Supplier Footprint": "0603",
+                "3D Model": "fc143cca1e79419f9cd78b61e9279f08|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "R0603",
+                "3D Model Transform": "31.8897,63.7794,0,90,0,0,0,0,0",
+                "Value": "0",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I4",
+                "DeviceName": "Res_0603",
+                "FootprintName": "R0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "$1N2",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge4": {
+            "props": {
+                "Unique ID": "gge4",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "R2",
+                "Device": "227726d468b8dd82",
+                "Footprint": "bca5ea9c5e8f0ea5",
+                "PCB Layer": "Default",
+                "Symbol": "e2702f28633ad49b",
+                "Supplier Footprint": "0603",
+                "3D Model": "fc143cca1e79419f9cd78b61e9279f08|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "R0603",
+                "3D Model Transform": "31.8897,63.7794,0,90,0,0,0,0,0",
+                "Value": "100",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I7",
+                "DeviceName": "Res_0603",
+                "FootprintName": "R0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "ENC_A",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "A",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge5": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "R3",
+                "Device": "227726d468b8dd82",
+                "Footprint": "bca5ea9c5e8f0ea5",
+                "PCB Layer": "Default",
+                "Symbol": "e2702f28633ad49b",
+                "Unique ID": "gge5",
+                "Supplier Footprint": "0603",
+                "3D Model": "fc143cca1e79419f9cd78b61e9279f08|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "R0603",
+                "3D Model Transform": "31.8897,63.7794,0,90,0,0,0,0,0",
+                "Value": "100",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I8",
+                "DeviceName": "Res_0603",
+                "FootprintName": "R0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "ENC_B",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "B",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge6": {
+            "props": {
+                "Unique ID": "gge6",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C1",
+                "Device": "7f64f1e2eff1953f",
+                "Footprint": "76dc3710d46bb86c",
+                "PCB Layer": "Default",
+                "Symbol": "d662d873a55d582f",
+                "Supplier Footprint": "0603",
+                "3D Model": "ac125912035d415993ca9572d50418b1|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "C0603_L1.6-W0.8-H0.8",
+                "3D Model Transform": "62.992,31.496,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I9",
+                "DeviceName": "CAP_0603",
+                "FootprintName": "C0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "3V3",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge7": {
+            "props": {
+                "Unique ID": "gge7",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C2",
+                "Device": "7f64f1e2eff1953f",
+                "Footprint": "76dc3710d46bb86c",
+                "PCB Layer": "Default",
+                "Symbol": "d662d873a55d582f",
+                "Supplier Footprint": "0603",
+                "3D Model": "ac125912035d415993ca9572d50418b1|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "C0603_L1.6-W0.8-H0.8",
+                "3D Model Transform": "62.992,31.496,0,0,0,0,0,0,0",
+                "Value": "1uF",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I10",
+                "DeviceName": "CAP_0603",
+                "FootprintName": "C0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "3V3",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge8": {
+            "props": {
+                "Unique ID": "gge8",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "R4",
+                "Device": "227726d468b8dd82",
+                "Footprint": "bca5ea9c5e8f0ea5",
+                "PCB Layer": "Default",
+                "Symbol": "e2702f28633ad49b",
+                "Supplier Footprint": "0603",
+                "3D Model": "fc143cca1e79419f9cd78b61e9279f08|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "R0603",
+                "3D Model Transform": "31.8897,63.7794,0,90,0,0,0,0,0",
+                "Value": "470",
+                "Name": "={Value}",
+                "Description": "",
+                "Sim Model": "",
+                "Sim Model Title": "",
+                "Sim Model Path": "",
+                "NGSpice Model": "",
+                "NGSpice Model Title": "",
+                "NGspice Model Path": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I11",
+                "DeviceName": "Res_0603",
+                "FootprintName": "R0603"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "$1N13",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge9": {
+            "props": {
+                "Unique ID": "gge9",
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Device": "eabf333f70425527",
+                "Footprint": "73b0f138fe6ede6f",
+                "PCB Layer": "Default",
+                "Symbol": "087fe7cdbd907398",
+                "Designator": "LED1",
+                "LCSC Part Name": "0805 翠绿 高亮",
+                "Supplier Part": "C2297",
+                "Manufacturer": "KENTO",
+                "Manufacturer Part": "KT-0805G",
+                "Supplier Footprint": "0805",
+                "JLCPCB Part Class": "Basic Part",
+                "Datasheet": "https://item.szlcsc.com/datasheet/KT-0805G/2670.html",
+                "Supplier": "LCSC",
+                "3D Model": "6ccd75a2b5134d6ab756ecf3c14a7290|0819f05c4eef4c71ace90d822a990e87",
+                "3D Model Title": "LED0805-RD",
+                "3D Model Transform": "79.527,49.2125,0,0,0,0,0,0,0",
+                "Lamp Holder Type": "2mmx1.25mm方形灯头",
+                "Illumination Color": "翠绿色",
+                "Voltage - Forward(Vf)": "2.6V~3.1V",
+                "Power(Watts)": "100mW",
+                "Forward Current": "5mA",
+                "Wavelength - Dominant": "513nm~528nm",
+                "Peak Wavelength": "525nm",
+                "Diode Configuration": "独立二极管",
+                "Lens Color": "无色透明透镜",
+                "Color Temperature": "-",
+                "Luminous Intensity": "430mcd",
+                "Viewing Angle": "120°",
+                "Mounting Style": "-",
+                "Operating Temperature": "-40℃~+85℃",
+                "Name": "={Manufacturer Part}",
+                "Description": "灯头类型:2mmx1.25mm方形灯头;发光颜色:翠绿色;正向压降(Vf):2.6V~3.1V;功率:100mW;正向电流:5mA;波长:513nm~528nm;二极管配置:独立二极管;透镜颜色:无色透明透镜;色温:-;发光强度:430mcd;发光角度:120°;载带方式:-;工作温度:-40℃~+85℃;",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I12",
+                "DeviceName": "KT-0805G",
+                "FootprintName": "LED0805-R-RD"
+            },
+            "altLibs": {
+                "devices": [],
+                "footprints": []
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "A",
+                    "number": "1",
+                    "net": "$1N13",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "K",
+                    "number": "2",
+                    "net": "GND",
+                    "pinClass": "",
+                    "pinDifferentialPairClass": "",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        }
+    },
+    "designRule": {
+        "trackPhysics": {
+            "copperThickness1oz": {
+                "name": "copperThickness1oz",
+                "isDefault": true,
+                "unit": "mm",
+                "strokeValue": {
+                    "common": {
+                        "min": 0.127,
+                        "max": 2.54,
+                        "default": 0.254
+                    }
+                }
+            },
+            "copperThickness2oz": {
+                "name": "copperThickness2oz",
+                "isDefault": false,
+                "unit": "mm",
+                "strokeValue": {
+                    "common": {
+                        "min": 0.203,
+                        "max": 2.54,
+                        "default": 0.254
+                    }
+                }
+            }
+        },
+        "netRule": {
+            "3V3": {
+                "net": "3V3",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "$1N2": {
+                "net": "$1N2",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "GND": {
+                "net": "GND",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "ENC_A": {
+                "net": "ENC_A",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "A": {
+                "net": "A",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "ENC_B": {
+                "net": "ENC_B",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "B": {
+                "net": "B",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "$1N13": {
+                "net": "$1N13",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            }
+        }
+    },
+    "differentialPair": {},
+    "netClass": {},
+    "equalLengthNetGroup": {},
+    "differentialPairGroups": {}
+}

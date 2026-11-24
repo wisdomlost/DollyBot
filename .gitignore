@@ -12,3 +12,9 @@ __pycache__/
 .env*
 !.env.example
 /tools/local.ps1
+# 私有草稿：临时脚本、截图、草稿，只有自己看，不推送
+/hardware/private/
+# 立创EDA 自动备份
+/hardware/DollyBot_V1/DollyBot_V1_backup/
+# Office / WPS 临时锁文件
+~$*

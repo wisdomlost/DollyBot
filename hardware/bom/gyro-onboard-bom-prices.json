@@ -1,0 +1,200 @@
+{
+  "items": [
+    {
+      "mpn": "ICM-42688-P",
+      "lcsc": "C1850418",
+      "value": "ICM-42688-P",
+      "dsg": [
+        "U1"
+      ],
+      "qty": 1,
+      "fp": "LGA-14 3.0x2.5 mm",
+      "code": "C1850418",
+      "jlc_mpn": "ICM-42688-P",
+      "brand": "TDK InvenSense",
+      "spec": "LGA-14(2.5x3)",
+      "lib": "expand",
+      "stock": 0,
+      "process": "SMT",
+      "usd1": 25.491,
+      "usd": [
+        [
+          1,
+          25.491
+        ],
+        [
+          3,
+          25.491
+        ],
+        [
+          5,
+          25.491
+        ],
+        [
+          30,
+          24.4823
+        ],
+        [
+          32,
+          24.4823
+        ],
+        [
+          34,
+          24.4823
+        ]
+      ],
+      "cny1": 157.245,
+      "stock_cn": 4700,
+      "resolved": true,
+      "resolved_by": "bom"
+    },
+    {
+      "mpn": "GRM155R71H104KE14D",
+      "lcsc": "C77020",
+      "value": "100nF",
+      "dsg": [
+        "C1",
+        "C2"
+      ],
+      "qty": 2,
+      "fp": "0402",
+      "code": "C77020",
+      "jlc_mpn": "GRM155R71H104KE14D",
+      "brand": "Murata Electronics",
+      "spec": "0402",
+      "lib": "expand",
+      "stock": 2840315,
+      "process": "SMT",
+      "usd1": 0.0078,
+      "usd": [
+        [
+          1,
+          0.0078
+        ],
+        [
+          1000,
+          0.0062
+        ],
+        [
+          3000,
+          0.0053
+        ],
+        [
+          10000,
+          0.0048
+        ],
+        [
+          50000,
+          0.0043
+        ],
+        [
+          100000,
+          0.0041
+        ]
+      ],
+      "cny1": 0.0247,
+      "stock_cn": 1396293,
+      "resolved": true,
+      "resolved_by": "bom"
+    },
+    {
+      "mpn": "CL05A225MQ5NSNC",
+      "lcsc": "C12530",
+      "value": "2.2uF",
+      "dsg": [
+        "C3"
+      ],
+      "qty": 1,
+      "fp": "0402",
+      "code": "C12530",
+      "jlc_mpn": "CL05A225MQ5NSNC",
+      "brand": "Samsung Electro-Mechanics",
+      "spec": "0402",
+      "lib": "base",
+      "stock": 3098914,
+      "process": "SMT",
+      "usd1": 0.0049,
+      "usd": [
+        [
+          1,
+          0.0049
+        ],
+        [
+          1000,
+          0.0037
+        ],
+        [
+          3000,
+          0.0031
+        ],
+        [
+          10000,
+          0.0027
+        ],
+        [
+          50000,
+          0.0025
+        ],
+        [
+          100000,
+          0.0024
+        ]
+      ],
+      "cny1": 0.0144,
+      "stock_cn": 1322279,
+      "resolved": true,
+      "resolved_by": "bom"
+    },
+    {
+      "mpn": "0402WGF1002TCE",
+      "lcsc": "C25744",
+      "value": "10k",
+      "dsg": [
+        "R1",
+        "R2"
+      ],
+      "qty": 2,
+      "fp": "0402",
+      "code": "C25744",
+      "jlc_mpn": "0402WGF1002TCE",
+      "brand": "UNI-ROYAL(Uniroyal Elec)",
+      "spec": "0402",
+      "lib": "base",
+      "stock": 35752445,
+      "process": "SMT",
+      "usd1": 0.0015,
+      "usd": [
+        [
+          1,
+          0.0015
+        ],
+        [
+          1000,
+          0.0011
+        ],
+        [
+          3000,
+          0.001
+        ],
+        [
+          10000,
+          0.0009
+        ],
+        [
+          50000,
+          0.0008
+        ],
+        [
+          50200,
+          0.0008
+        ]
+      ],
+      "cny1": 0.0046,
+      "stock_cn": 13441383,
+      "resolved": true,
+      "resolved_by": "bom"
+    }
+  ],
+  "total_cny": 157.32,
+  "priced_kinds": 4
+}

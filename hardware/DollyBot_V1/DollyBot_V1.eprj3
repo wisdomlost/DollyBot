@@ -21,63 +21,64 @@
     "boards": {
       "7f16c3a335840d66": {
         "uuid": "7f16c3a335840d66",
-        "title": "Board1",
+        "title": "mainboard",
         "zIndex": 1
+      },
+      "9c865c3aa62041fc": {
+        "uuid": "9c865c3aa62041fc",
+        "title": "driver",
+        "zIndex": 3
+      },
+      "d77443b9e471f77f": {
+        "uuid": "d77443b9e471f77f",
+        "title": "encoder",
+        "zIndex": 4
       }
     },
     "schematics": {
+      "f59c7fd5610e9b50": {
+        "uuid": "f59c7fd5610e9b50",
+        "name": "driver",
+        "board": "9c865c3aa62041fc",
+        "source": "",
+        "version": "1795143779256",
+        "updateTime": 1795143779256
+      },
+      "fca4b801e5cc4a83": {
+        "uuid": "fca4b801e5cc4a83",
+        "name": "encoder",
+        "board": "d77443b9e471f77f",
+        "source": "",
+        "version": "1795154726136",
+        "updateTime": 1795154726136
+      },
       "6aa2e6655e9d6666": {
         "uuid": "6aa2e6655e9d6666",
         "name": "mainboard",
         "board": "7f16c3a335840d66",
         "source": "",
-        "version": "1794314337471",
-        "updateTime": 1794314337471
-      },
-      "df3b5c36d7af2cd4": {
-        "uuid": "df3b5c36d7af2cd4",
-        "name": "encoder",
-        "board": "",
-        "source": "",
-        "version": "1794313745069",
-        "updateTime": 1794313745069
-      },
-      "f59c7fd5610e9b50": {
-        "uuid": "f59c7fd5610e9b50",
-        "name": "driver",
-        "board": "",
-        "source": "",
-        "version": "1794312820045",
-        "updateTime": 1794312820045
+        "version": "1795521336800",
+        "updateTime": 1795521336800
       }
     },
     "sheets": {
-      "442fef08f5e0a50e": {
-        "uuid": "442fef08f5e0a50e",
-        "title": "MCU_Core",
-        "schematic_uuid": "6aa2e6655e9d6666",
-        "zIndex": 1,
-        "source": "",
-        "version": "1794314337471",
-        "updateTime": 1794314337471
-      },
-      "07505afa5ed67dbb": {
-        "uuid": "07505afa5ed67dbb",
-        "title": "Power",
-        "schematic_uuid": "6aa2e6655e9d6666",
-        "zIndex": 2,
-        "source": "",
-        "version": "1794311080372",
-        "updateTime": 1794311080372
-      },
-      "c67e8f2a499acfa9": {
-        "uuid": "c67e8f2a499acfa9",
-        "title": "interface",
-        "schematic_uuid": "6aa2e6655e9d6666",
+      "c624512adadb9ea8": {
+        "uuid": "c624512adadb9ea8",
+        "title": "driver",
+        "schematic_uuid": "f59c7fd5610e9b50",
         "zIndex": 3,
         "source": "",
-        "version": "1794314123616",
-        "updateTime": 1794314123616
+        "version": "1794897063752",
+        "updateTime": 1794897063752
+      },
+      "4fddc7afc4fcf62d": {
+        "uuid": "4fddc7afc4fcf62d",
+        "title": "encoder",
+        "schematic_uuid": "fca4b801e5cc4a83",
+        "zIndex": 1,
+        "source": "",
+        "version": "1795154726136",
+        "updateTime": 1795154726136
       },
       "349cc6703cc3224b": {
         "uuid": "349cc6703cc3224b",
@@ -85,64 +86,76 @@
         "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 4,
         "source": "",
-        "version": "1794312605121",
-        "updateTime": 1794312605121
+        "version": "1795521095675",
+        "updateTime": 1795521095675
       },
-      "c624512adadb9ea8": {
-        "uuid": "c624512adadb9ea8",
-        "title": "P1",
-        "schematic_uuid": "f59c7fd5610e9b50",
+      "25abfb62d82102ae": {
+        "uuid": "25abfb62d82102ae",
+        "title": "Gyro",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 5,
+        "source": "",
+        "version": "1795155201245",
+        "updateTime": 1795155201245
+      },
+      "c67e8f2a499acfa9": {
+        "uuid": "c67e8f2a499acfa9",
+        "title": "interface",
+        "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 3,
         "source": "",
-        "version": "1794312820045",
-        "updateTime": 1794312820045
+        "version": "1795151784407",
+        "updateTime": 1795151784407
       },
-      "9bce36ac2cd56dbf": {
-        "uuid": "9bce36ac2cd56dbf",
-        "title": "P1",
-        "schematic_uuid": "df3b5c36d7af2cd4",
-        "zIndex": 3,
+      "442fef08f5e0a50e": {
+        "uuid": "442fef08f5e0a50e",
+        "title": "MCU_Core",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 1,
         "source": "",
-        "version": "1794313745069",
-        "updateTime": 1794313745069
+        "version": "1795521336800",
+        "updateTime": 1795521336800
+      },
+      "07505afa5ed67dbb": {
+        "uuid": "07505afa5ed67dbb",
+        "title": "Power",
+        "schematic_uuid": "6aa2e6655e9d6666",
+        "zIndex": 2,
+        "source": "",
+        "version": "1795516640460",
+        "updateTime": 1795516640460
       }
     },
     "pcbs": {
+      "74e5c6b999abaac9": {
+        "uuid": "74e5c6b999abaac9",
+        "title": "PCB_driver",
+        "board": "9c865c3aa62041fc",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1794897059269",
+        "updateTime": 1794897059269
+      },
+      "f69e22f484d97c19": {
+        "uuid": "f69e22f484d97c19",
+        "title": "PCB_encoder",
+        "board": "d77443b9e471f77f",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1795151660107",
+        "updateTime": 1795151660107
+      },
       "5de121ae4888a022": {
         "uuid": "5de121ae4888a022",
-        "title": "PCB1",
+        "title": "PCB_mainboard",
         "board": "7f16c3a335840d66",
         "parent_uuid": "",
         "source": "",
-        "version": "1793078539668",
-        "updateTime": 1793078539668
-      },
-      "4c09043e23af871e": {
-        "uuid": "4c09043e23af871e",
-        "title": "PCB1_1",
-        "board": "",
-        "parent_uuid": "",
-        "source": "",
-        "version": "1794313606210",
-        "updateTime": 1794313606210
-      },
-      "74e5c6b999abaac9": {
-        "uuid": "74e5c6b999abaac9",
-        "title": "PCB1_2",
-        "board": "",
-        "parent_uuid": "",
-        "source": "",
-        "version": "1794313745725",
-        "updateTime": 1794313745725
+        "version": "1795409338545",
+        "updateTime": 1795409338545
       }
     },
-    "panels": {
-      "90ef8df2e36c3e42": {
-        "uuid": "90ef8df2e36c3e42",
-        "title": "Panel1",
-        "zIndex": null
-      }
-    },
+    "panels": {},
     "blockSymbols": {},
     "owner": {
       "uuid": "2535a49b045e4690b582cb92b3015e91"

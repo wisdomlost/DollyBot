@@ -1,31 +1,38 @@
 # DollyBot 硬件资料索引
 
-日期：2026-10-27
+最后更新：2026-11-20
 状态：方案审查阶段。未修改原理图、PCB，未做硬件测试，未烧录。
+说明：本文描述的是当前工作区状态；早期工程快照仍留在 git 历史里（见文末"历史工程"）。
 
-## 当前工作区状态
+## 目录结构
 
-| 路径 | 状态 | 说明 |
-| --- | --- | --- |
-| `hardware/DollyBot_V1/` | 新建，未跟踪 | 嘉立创 EDA 专业版 `.eprj3` 文件夹工程。目前只有 `MCU_Core` 图页占位、`PCB1`、`Panel1`，还没有 `sch/` 源文件，不能视为已完成原理图。 |
-| `hardware/DollyBot_STM32_V1_MCU_Core.epro2` | 工作区已删除，HEAD 中仍存在 | 旧版完整工程快照，包含四页原理图、PCB 和 21 个已审核的最小系统器件。可用 `git show HEAD:...` 恢复。 |
-| `hardware/DollyBot_STM32_V1.eprj2` | 工作区已删除，暂存区中仍存在 | 旧版 SQLite 工程，设计保存在历史记录中，`documents` 表为空不等于工程为空。可用 `git show :...` 恢复。 |
-| `hardware/MCU_Core.md` | 工作区已删除，HEAD 中仍存在 | 旧版最小系统器件、网络和验证记录。 |
-| `hardware/Power_Stage1_Review.md` | 工作区已删除，HEAD 中仍存在 | 旧版电源设计前审查和阶段二待决问题。 |
+| 路径 | 放什么 |
+| --- | --- |
+| `hardware/docs/` | **正式设计文档**，给别人看的都在这一个地方 |
+| `hardware/bom/` | 采购与下单文件：BOM 表（xlsx/csv/md） |
+| `hardware/netlist/` | 立创EDA 导出的网表 `.enet` |
+| `hardware/DollyBot_V1/` | 立创EDA 专业版工程（`.eprj3` 文件夹工程） |
+| `hardware/private/` | 私有草稿、临时脚本、截图；已 gitignore，不推送 |
+| `tools/` | 仓库级脚本，如主机测试 `test.ps1` |
 
-旧工程没有丢失。恢复命令只写入 `build/` 或新目录，不覆盖当前工程：
+约定：正式文档只进 `docs/`，不要在 `hardware/` 顶层散放；一次性的东西进 `private/`。
 
-```bash
-# 旧版快照（HEAD）
-git show HEAD:hardware/DollyBot_STM32_V1_MCU_Core.epro2 > build/eda-work/DollyBot_STM32_V1_MCU_Core.epro2
-# 旧版 SQLite 工程（暂存区）
-git show :hardware/DollyBot_STM32_V1.eprj2 > build/eda-work/DollyBot_STM32_V1.eprj2
-# 两份审查记录（HEAD）
-git show HEAD:hardware/MCU_Core.md > build/eda-work/MCU_Core.md
-git show HEAD:hardware/Power_Stage1_Review.md > build/eda-work/Power_Stage1_Review.md
-```
+## 文档
 
-`build/` 不入库。当前工作区中的删除和新增是用户操作，本文档不擅自恢复、覆盖或删除。
+| 文档 | 内容 |
+| --- | --- |
+| [hardware-plan.md](docs/hardware-plan.md) | 硬件架构审查、STM32 资源分配与引脚复用校验、电源架构、接口定义、实施顺序。 |
+| [component-selection.md](docs/component-selection.md) | 关键器件选型清单（含留空项）、电机—驱动—电池匹配矩阵、BOM 成本估算、待确认问题。 |
+| [power-redesign.md](docs/power-redesign.md) | 电源方案重做：拓扑取舍、器件选型、与旧方案的差异。 |
+| [Power_page.md](docs/Power_page.md) | 电源页逐页说明与器件参数（附 [power-topology.png](docs/power-topology.png)）。 |
+| [gimbal-power-wiring.md](docs/gimbal-power-wiring.md) / [gimbal-wiring-guide.md](docs/gimbal-wiring-guide.md) | 云台供电与接线。 |
+| [encoder-board-design.md](docs/encoder-board-design.md) / [encoder-wiring.md](docs/encoder-wiring.md) | 编码器板设计与接线。 |
+| [gyro-board-design.md](docs/gyro-board-design.md) | 陀螺仪板设计。 |
+| [uart-extension-plan.md](docs/uart-extension-plan.md) | UART 扩展与主板 5P 接口定义。 |
+| [driver-board-bom.md](bom/driver-board-bom.md) | 双路驱动板 BOM、金额、下单方式、接线与待定问题。 |
+| [AI_WORK_NOTES.md](docs/AI_WORK_NOTES.md) | 画板工作笔记：EDA 工程状态、引脚—网络表、MCP 操作速查。 |
+| [learning-path.md](docs/learning-path.md) | 学习路线与资料索引。 |
+| [eprj3-intro.md](DollyBot_V1/eprj3-intro.md) | 立创EDA 文件夹工程格式说明。 |
 
 ## 已确定的决策
 
@@ -44,20 +51,12 @@ git show HEAD:hardware/Power_Stage1_Review.md > build/eda-work/Power_Stage1_Revi
 - EDA 使用嘉立创 EDA 专业版。
 - 运动安全期限 500 ms、独立检查任务、ping 不刷新期限、新会话必须停机；这些是固件约束，硬件必须提供默认关闭的电机使能。
 
-## 本次新增文档
-
-| 文档 | 内容 |
-| --- | --- |
-| [hardware-plan.md](hardware-plan.md) | 硬件架构审查、STM32 资源分配与引脚复用校验、电源架构、接口定义、现有最小系统审查、实施顺序。 |
-| [component-selection.md](component-selection.md) | 关键器件选型清单（含留空项）、电机—驱动—电池匹配矩阵、BOM 成本估算、待确认问题。 |
-| [AI_WORK_NOTES.md](AI_WORK_NOTES.md) | 给 AI 的画板工作笔记：当前 EDA 工程状态、U1 完整引脚—网络表、MCP 操作速查、坐标、下一步顺序。 |
-
 ## 验证边界
 
 - 引脚复用：用本机 STM32CubeMX MCU 数据库 `STM32F405RGTx.xml` 对 51 个 I/O 逐一校验，全部通过；并与 ST DS8626 Rev 12 的 LQFP64 引脚表交叉核对。
 - 定时器、编码器模式、VCAP、去耦、复位、BOOT、HSE：依据 ST DS8626 Rev 12、AN4488、RM0090。
-- 器件价格：来自公开搜索结果的参考区间，未在立创商城/淘宝下单核实；表中均标为“参考/待核实”。
-- 未运行 `tools/test.ps1`，未运行 `idf.py build`，未做任何硬件测试。本次没有修改控制/协议代码。
+- 器件价格：早期文档中的价格是"参考区间"，未核实；驱动板 BOM 里的价格是 2026-11-20 从立创商城/嘉立创接口核到的实价。
+- 未做任何硬件测试。
 
 ## 当前阻塞项（按优先级）
 
@@ -71,7 +70,20 @@ git show HEAD:hardware/Power_Stage1_Review.md > build/eda-work/Power_Stage1_Revi
 
 ## 下一步
 
-1. 回答 [component-selection.md](component-selection.md) 中的关键问题，优先确认 **RC380 的额定电压/堵转电流/是否有编码器**，以及 **已有驱动板的型号/控制接口/电流能力**。
+1. 回答 [component-selection.md](docs/component-selection.md) 中的关键问题，优先确认 **RC380 的额定电压/堵转电流/是否有编码器**，以及 **已有驱动板的型号/控制接口/电流能力**。
 2. 确认 3S 电池容量/放电能力、底盘/麦轮尺寸和 ESP32 具体板型。
 3. 确认是在 `hardware/DollyBot_V1/` 新工程中重建最小系统，还是恢复旧工程继续；未确认前不覆盖任何工程。
-4. 冻结接口和电源拓扑后，再按 [hardware-plan.md](hardware-plan.md) 的阶段 1–6 完善原理图，最后才进入 PCB 布局。
+4. 冻结接口和电源拓扑后，再按 [hardware-plan.md](docs/hardware-plan.md) 的阶段 1–6 完善原理图，最后才进入 PCB 布局。
+
+## 历史工程
+
+旧版工程没有丢，仍在 git 历史里，恢复命令只写入 `build/` 或新目录，不覆盖当前工程：
+
+```bash
+git show HEAD:hardware/DollyBot_STM32_V1_MCU_Core.epro2 > build/eda-work/DollyBot_STM32_V1_MCU_Core.epro2
+git show :hardware/DollyBot_STM32_V1.eprj2 > build/eda-work/DollyBot_STM32_V1.eprj2
+git show HEAD:hardware/MCU_Core.md > build/eda-work/MCU_Core.md
+git show HEAD:hardware/Power_Stage1_Review.md > build/eda-work/Power_Stage1_Review.md
+```
+
+`build/` 不入库。

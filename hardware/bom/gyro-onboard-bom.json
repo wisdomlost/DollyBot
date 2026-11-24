@@ -1,0 +1,42 @@
+{
+  "source": "hardware/docs/gyro-board-design.md §4（板载集成，必需件；可选 LED/晶振未计入）",
+  "total": 6,
+  "groups": [
+    {
+      "mpn": "ICM-42688-P",
+      "lcsc": "C1850418",
+      "fp": "LGA-14 3.0x2.5 mm",
+      "cls": "扩展库",
+      "value": "ICM-42688-P",
+      "qty": 1,
+      "dsg": ["U1"]
+    },
+    {
+      "mpn": "GRM155R71H104KE14D",
+      "lcsc": "C77020",
+      "fp": "0402",
+      "cls": "扩展库",
+      "value": "100nF",
+      "qty": 2,
+      "dsg": ["C1", "C2"]
+    },
+    {
+      "mpn": "CL05A225MQ5NSNC",
+      "lcsc": "C12530",
+      "fp": "0402",
+      "cls": "基础库",
+      "value": "2.2uF",
+      "qty": 1,
+      "dsg": ["C3"]
+    },
+    {
+      "mpn": "0402WGF1002TCE",
+      "lcsc": "C25744",
+      "fp": "0402",
+      "cls": "基础库",
+      "value": "10k",
+      "qty": 2,
+      "dsg": ["R1", "R2"]
+    }
+  ]
+}
