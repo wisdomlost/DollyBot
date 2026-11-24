@@ -64,7 +64,7 @@ static void disconnect_protocol_peer(uint32_t handle)
 static void protocol_task(void *arg)
 {
     (void)arg;
-    dollybot_protocol_t protocol = {0};
+    static dollybot_protocol_t protocol;
     uint32_t handle = 0;
     int bytes_in_flight = 0;
     bool congested = false;
@@ -89,7 +89,7 @@ static void protocol_task(void *arg)
             case SPP_RX:
                 if (handle != 0 && !dollybot_feed(&protocol, event.data, event.length, now_ms,
                                                   stm32_uart_forward)) {
-                    ESP_LOGW(TAG, "DollyBot ACK queue overflow");
+                    ESP_LOGW(TAG, "DollyBot response queue overflow");
                     disconnect_protocol_peer(handle);
                     handle = 0;
                 }
@@ -109,10 +109,23 @@ static void protocol_task(void *arg)
             }
         }
 
-        if (handle == 0 || bytes_in_flight != 0 || congested) {
+        if (handle == 0) {
             continue;
         }
-        // Drain ACKs ahead of telemetry, with at most one SPP write in flight.
+
+        uint8_t uart_data[128];
+        int uart_length = stm32_uart_read(uart_data, sizeof(uart_data));
+        if (uart_length > 0 && !dollybot_feed_stm32(&protocol, uart_data, (size_t)uart_length)) {
+            ESP_LOGW(TAG, "DollyBot UART response queue overflow");
+            disconnect_protocol_peer(handle);
+            handle = 0;
+            continue;
+        }
+
+        if (bytes_in_flight != 0 || congested) {
+            continue;
+        }
+        // Preserve response order, with at most one SPP write in flight.
         uint8_t output[DOLLYBOT_STATUS_FRAME];
         int length = (int)dollybot_next_frame(&protocol, now_ms, output);
         if (length != 0) {

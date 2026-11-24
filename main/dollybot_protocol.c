@@ -25,6 +25,7 @@ enum {
     TAKE_POINT = 0x32,
     ACK = 0x80,
     STATUS = 0x90,
+    POINT = 0x91,
 };
 
 enum {
@@ -88,22 +89,32 @@ static size_t encode(uint8_t *out, uint8_t type, uint16_t seq, uint32_t session,
     return HEADER_SIZE + length + CRC_SIZE;
 }
 
-static bool queue_ack(dollybot_protocol_t *protocol, uint32_t session,
-                      uint16_t seq, uint8_t type, uint8_t result)
+static bool queue_response(dollybot_protocol_t *protocol, const uint8_t *data, size_t length)
 {
-    if (protocol->ack_count == DOLLYBOT_ACK_QUEUE_SIZE) {
+    if (protocol->reply_count == DOLLYBOT_REPLY_QUEUE_SIZE) {
         return false;
     }
 
-    size_t tail = (protocol->ack_head + protocol->ack_count) % DOLLYBOT_ACK_QUEUE_SIZE;
-    protocol->acks[tail] = (dollybot_ack_t){
-        .session = session,
-        .seq = seq,
-        .request_type = type,
-        .result = result,
-    };
-    ++protocol->ack_count;
+    size_t tail = (protocol->reply_head + protocol->reply_count) % DOLLYBOT_REPLY_QUEUE_SIZE;
+    dollybot_response_t *response = &protocol->replies[tail];
+    memcpy(response->data, data, length);
+    response->length = length;
+    ++protocol->reply_count;
     return true;
+}
+
+static bool queue_ack(dollybot_protocol_t *protocol, uint32_t session,
+                      uint16_t seq, uint8_t type, uint8_t result)
+{
+    uint8_t payload[6] = {type, result};
+    uint8_t frame[HEADER_SIZE + sizeof(payload) + CRC_SIZE];
+    size_t length = encode(frame, ACK, seq, session, payload, sizeof(payload));
+    return queue_response(protocol, frame, length);
+}
+
+static bool is_stm32_command(uint8_t type)
+{
+    return type == CALIBRATE || type == TEACH_BEGIN || type == TEACH_END || type == TAKE_POINT;
 }
 
 static uint8_t log_command(dollybot_protocol_t *protocol, uint8_t type, uint16_t seq,
@@ -139,36 +150,19 @@ static uint8_t log_command(dollybot_protocol_t *protocol, uint8_t type, uint16_t
         return RESULT_OK;
     }
     case DOLLYBOT_STOP:
-    case CALIBRATE:
         if (length != 0) {
             return RESULT_BAD_ARGUMENT;
         }
-        printf("%s seq=%u\n", type == DOLLYBOT_STOP ? "STOP" : "CALIBRATE", (unsigned)seq);
-        return type == DOLLYBOT_STOP ? RESULT_OK : RESULT_UNSUPPORTED;
-    case TEACH_BEGIN:
-        if (length != 5 || payload[0] < 1 || payload[0] > 3) {
-            return RESULT_BAD_ARGUMENT;
-        }
-        printf("TEACH_BEGIN seq=%u mode=%u frame_id=%" PRIu32 "\n",
-               (unsigned)seq, (unsigned)payload[0], read_u32(payload + 1));
-        return RESULT_UNSUPPORTED;
-    case TEACH_END:
-    case TAKE_POINT:
-        if (length != 4) {
-            return RESULT_BAD_ARGUMENT;
-        }
-        printf("%s seq=%u teach_id=%" PRIu32 "\n",
-               type == TEACH_END ? "TEACH_END" : "TAKE_POINT", (unsigned)seq, read_u32(payload));
-        return RESULT_UNSUPPORTED;
+        printf("STOP seq=%u\n", (unsigned)seq);
+        return RESULT_OK;
     default:
         return RESULT_UNSUPPORTED;
     }
 }
 
-static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_t now_ms,
-                         dollybot_forward_fn forward)
+static bool handle_frame(dollybot_protocol_t *protocol, const uint8_t *frame, uint16_t length,
+                         uint64_t now_ms, dollybot_forward_fn forward)
 {
-    const uint8_t *frame = protocol->rx;
     uint8_t type = frame[3];
     uint16_t seq = read_u16(frame + 4);
     uint32_t session = read_u32(frame + 8);
@@ -190,9 +184,14 @@ static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_
             protocol->next_status_ms = now_ms;
             protocol->status_seq = 0;
             protocol->last_motion_seq = 0;
-            protocol->ack_head = 0;
-            protocol->ack_count = 0;
+            protocol->reply_head = 0;
+            protocol->reply_count = 0;
+            protocol->stm32_status_seen = false;
+            protocol->stm32_rx.length = 0;
         }
+    } else if (is_stm32_command(type) && forward != NULL) {
+        forward(frame, HEADER_SIZE + length + CRC_SIZE, type, false);
+        return true;
     } else if (type == PING) {
         if (length != 0) {
             result = RESULT_BAD_ARGUMENT;
@@ -206,49 +205,81 @@ static bool handle_frame(dollybot_protocol_t *protocol, uint16_t length, uint64_
         return false;
     }
 
-    // The local endpoint can report unsupported features while UART captures the request.
+    // HELLO, PING and STOP keep their local ACK and also update the STM32.
     if (forward != NULL && frame[2] == VERSION && type < ACK && result != RESULT_BAD_ARGUMENT) {
         forward(frame, HEADER_SIZE + length + CRC_SIZE, type, new_session);
     }
     return true;
 }
 
-static void discard_rx(dollybot_protocol_t *protocol, size_t count)
+static bool handle_stm32_frame(dollybot_protocol_t *protocol, const uint8_t *frame, uint16_t length)
 {
-    protocol->rx_length -= count;
-    memmove(protocol->rx, protocol->rx + count, protocol->rx_length);
+    if (frame[2] != VERSION || protocol->session == 0 || read_u32(frame + 8) != protocol->session) {
+        return true;
+    }
+
+    switch (frame[3]) {
+    case STATUS:
+        if (length != STATUS_PAYLOAD_SIZE) {
+            return true;
+        }
+        protocol->stm32_status_seen = true;
+        break;
+    case ACK:
+        if (length != 6 || !is_stm32_command(frame[HEADER_SIZE])) {
+            return true;
+        }
+        break;
+    case POINT:
+        if (length != 30) {
+            return true;
+        }
+        break;
+    default:
+        return true;
+    }
+
+    return queue_response(protocol, frame, HEADER_SIZE + length + CRC_SIZE);
 }
 
-bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms,
-                   dollybot_forward_fn forward)
+static void discard_rx(dollybot_stream_t *stream, size_t count)
 {
+    stream->length -= count;
+    memmove(stream->data, stream->data + count, stream->length);
+}
+
+static bool feed_stream(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms,
+                        dollybot_forward_fn forward, bool from_stm32)
+{
+    dollybot_stream_t *stream = from_stm32 ? &protocol->stm32_rx : &protocol->app_rx;
     for (size_t i = 0; i < length; ++i) {
-        protocol->rx[protocol->rx_length++] = data[i];
-        while (protocol->rx_length != 0) {
-            const uint8_t *frame = protocol->rx;
-            if (frame[0] != MAGIC_FIRST ||
-                (protocol->rx_length >= 2 && frame[1] != MAGIC_SECOND)) {
-                discard_rx(protocol, 1);
+        stream->data[stream->length++] = data[i];
+        while (stream->length != 0) {
+            const uint8_t *frame = stream->data;
+            if (frame[0] != MAGIC_FIRST || (stream->length >= 2 && frame[1] != MAGIC_SECOND)) {
+                discard_rx(stream, 1);
                 continue;
             }
-            if (protocol->rx_length < HEADER_SIZE) {
+            if (stream->length < HEADER_SIZE) {
                 break;
             }
             uint16_t payload_length = read_u16(frame + 6);
             if (payload_length > MAX_PAYLOAD) {
-                discard_rx(protocol, 1);
+                discard_rx(stream, 1);
                 continue;
             }
             size_t frame_length = HEADER_SIZE + payload_length + CRC_SIZE;
-            if (protocol->rx_length < frame_length) {
+            if (stream->length < frame_length) {
                 break;
             }
             if (crc16(frame + 2, frame_length - 2 - CRC_SIZE) != read_u16(frame + frame_length - CRC_SIZE)) {
-                discard_rx(protocol, 1);
+                discard_rx(stream, 1);
                 continue;
             }
-            bool accepted = handle_frame(protocol, payload_length, now_ms, forward);
-            discard_rx(protocol, frame_length);
+
+            bool accepted = from_stm32 ? handle_stm32_frame(protocol, frame, payload_length)
+                                       : handle_frame(protocol, frame, payload_length, now_ms, forward);
+            discard_rx(stream, frame_length);
             if (!accepted) {
                 return false;
             }
@@ -257,22 +288,33 @@ bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t le
     return true;
 }
 
+bool dollybot_feed(dollybot_protocol_t *protocol, const uint8_t *data, size_t length, uint64_t now_ms,
+                   dollybot_forward_fn forward)
+{
+    return feed_stream(protocol, data, length, now_ms, forward, false);
+}
+
+bool dollybot_feed_stm32(dollybot_protocol_t *protocol, const uint8_t *data, size_t length)
+{
+    return feed_stream(protocol, data, length, 0, NULL, true);
+}
+
 size_t dollybot_next_frame(dollybot_protocol_t *protocol, uint64_t now_ms,
                            uint8_t output[DOLLYBOT_STATUS_FRAME])
 {
-    if (protocol->ack_count != 0) {
-        dollybot_ack_t ack = protocol->acks[protocol->ack_head];
-        protocol->ack_head = (protocol->ack_head + 1) % DOLLYBOT_ACK_QUEUE_SIZE;
-        --protocol->ack_count;
-        uint8_t payload[6] = {ack.request_type, ack.result};
-        return encode(output, ACK, ack.seq, ack.session, payload, sizeof(payload));
+    if (protocol->reply_count != 0) {
+        const dollybot_response_t *response = &protocol->replies[protocol->reply_head];
+        memcpy(output, response->data, response->length);
+        protocol->reply_head = (protocol->reply_head + 1) % DOLLYBOT_REPLY_QUEUE_SIZE;
+        --protocol->reply_count;
+        return response->length;
     }
 
-    if (protocol->session == 0 || now_ms < protocol->next_status_ms) {
+    if (protocol->session == 0 || protocol->stm32_status_seen || now_ms < protocol->next_status_ms) {
         return 0;
     }
 
-    // Idle, uncalibrated placeholder pose while no hardware telemetry is available.
+    // Reports the uncalibrated state until the STM32 sends its first status.
     uint8_t payload[STATUS_PAYLOAD_SIZE] = {0};
     write_u32(payload, (uint32_t)(now_ms - protocol->started_ms));
     write_u16(payload + 32, protocol->last_motion_seq);

@@ -59,20 +59,9 @@ static void uart_tx_task(void *arg)
     }
 }
 
-static void uart_rx_task(void *arg)
+int stm32_uart_read(uint8_t *data, size_t capacity)
 {
-    (void)arg;
-    uint8_t data[128];
-    for (;;) {
-        int length = uart_read_bytes(port, data, sizeof(data), pdMS_TO_TICKS(20));
-        if (length > 0) {
-            ESP_LOGI(TAG, "UART RX %d bytes", length);
-            ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, length, ESP_LOG_INFO);
-        } else if (length < 0) {
-            ESP_LOGW(TAG, "UART RX read failed");
-            vTaskDelay(pdMS_TO_TICKS(20));
-        }
-    }
+    return uart_read_bytes(port, data, capacity, 0);
 }
 
 void stm32_uart_init(void)
@@ -95,8 +84,6 @@ void stm32_uart_init(void)
     ESP_ERROR_CHECK(tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(uart_tx_task, "stm32_uart_tx", 3072, NULL, 3, NULL) == pdPASS
                         ? ESP_OK : ESP_ERR_NO_MEM);
-    ESP_ERROR_CHECK(xTaskCreate(uart_rx_task, "stm32_uart_rx", 3072, NULL, 3, NULL) == pdPASS
-                        ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_LOGI(TAG, "UART1 TX=GPIO%d RX=GPIO%d baud=%d 8N1", STM32_TX_GPIO, STM32_RX_GPIO, STM32_BAUD);
 }
 
@@ -104,6 +91,7 @@ void stm32_uart_discard_pending(void)
 {
     atomic_fetch_add(&session_generation, 1);
     xQueueReset(tx_queue);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(uart_flush_input(port));
 }
 
 void stm32_uart_forward(const uint8_t *data, size_t length, uint8_t type, bool new_session)
