@@ -41,8 +41,8 @@
         "name": "driver",
         "board": "9c865c3aa62041fc",
         "source": "",
-        "version": "1795143779256",
-        "updateTime": 1795143779256
+        "version": "1795879693034",
+        "updateTime": 1795879693034
       },
       "fca4b801e5cc4a83": {
         "uuid": "fca4b801e5cc4a83",
@@ -66,10 +66,10 @@
         "uuid": "c624512adadb9ea8",
         "title": "driver",
         "schematic_uuid": "f59c7fd5610e9b50",
-        "zIndex": 3,
+        "zIndex": null,
         "source": "",
-        "version": "1794897063752",
-        "updateTime": 1794897063752
+        "version": "1795879693034",
+        "updateTime": 1795879693034
       },
       "4fddc7afc4fcf62d": {
         "uuid": "4fddc7afc4fcf62d",
@@ -127,23 +127,14 @@
       }
     },
     "pcbs": {
-      "791ab54a5918eb2d": {
-        "uuid": "791ab54a5918eb2d",
-        "title": "PCB1",
-        "board": "7f16c3a335840d66",
-        "parent_uuid": "",
-        "source": "",
-        "version": "1795872593082",
-        "updateTime": 1795872593082
-      },
       "74e5c6b999abaac9": {
         "uuid": "74e5c6b999abaac9",
         "title": "PCB_driver",
         "board": "9c865c3aa62041fc",
         "parent_uuid": "",
         "source": "",
-        "version": "1794897059269",
-        "updateTime": 1794897059269
+        "version": "1795880384938",
+        "updateTime": 1795880384938
       },
       "f69e22f484d97c19": {
         "uuid": "f69e22f484d97c19",
@@ -154,14 +145,14 @@
         "version": "1795151660107",
         "updateTime": 1795151660107
       },
-      "5de121ae4888a022": {
-        "uuid": "5de121ae4888a022",
+      "791ab54a5918eb2d": {
+        "uuid": "791ab54a5918eb2d",
         "title": "PCB_mainboard",
-        "board": "",
+        "board": "7f16c3a335840d66",
         "parent_uuid": "",
         "source": "",
-        "version": "1795787797637",
-        "updateTime": 1795787797637
+        "version": "1795873674226",
+        "updateTime": 1795873674226
       }
     },
     "panels": {},
