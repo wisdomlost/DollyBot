@@ -7,7 +7,7 @@
 <Cpu>IRAM(0x20000000,0x20000) IROM(0x08000000,0xC0000) CPUTYPE("Cortex-M4") FPU2 CLOCK(84000000) ELITTLE</Cpu>
 <OutputDirectory>.\Objects\</OutputDirectory><OutputName>DollyBot</OutputName><CreateExecutable>1</CreateExecutable><CreateHexFile>1</CreateHexFile><DebugInformation>1</DebugInformation><ListingPath>.\Listings\</ListingPath>
 </TargetCommonOption><TargetArmAds><ArmAdsMisc><AdsCpuType>"Cortex-M4"</AdsCpuType><RvctClst>0</RvctClst><useUlib>0</useUlib><uClangAs>0</uClangAs><hadFPU>1</hadFPU></ArmAdsMisc>
-<Cads><Optim>2</Optim><wLevel>3</wLevel><v6Lang>3</v6Lang><VariousControls><MiscControls>-I../src -I../board -I../vendor/st -I../vendor/cmsis -std=c11 -mfpu=fpv4-sp-d16 -mfloat-abi=hard</MiscControls><Define>STM32F405xx</Define><IncludePath>..\src;..\board;..\vendor\st;..\vendor\cmsis</IncludePath></VariousControls></Cads>
+<Cads><Optim>2</Optim><wLevel>3</wLevel><v6Lang>3</v6Lang><VariousControls><MiscControls>-I../src -I../board -I../../shared -I../vendor/st -I../vendor/cmsis -std=c11 -mfpu=fpv4-sp-d16 -mfloat-abi=hard</MiscControls><Define>STM32F405xx</Define><IncludePath>..\src;..\board;..\..\shared;..\vendor\st;..\vendor\cmsis</IncludePath></VariousControls></Cads>
 <LDads><umfTarg>0</umfTarg><ScatterFile>.\DollyBot.sct</ScatterFile><Misc>--map --info=sizes</Misc></LDads></TargetArmAds></TargetOption>
 <Groups><Group><GroupName>Motion and protocol</GroupName><Files><File><FileName>motion.c</FileName><FileType>1</FileType><FilePath>..\src\motion.c</FilePath></File>
 <File><FileName>wire.c</FileName><FileType>1</FileType><FilePath>..\src\wire.c</FilePath></File>

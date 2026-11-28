@@ -3,6 +3,7 @@
 
 #include "dollybot_protocol.h"
 #include "stm32_uart.h"
+#include "vofa_wifi.h"
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -63,20 +64,21 @@ static void disconnect_protocol_peer(uint32_t handle, uint32_t session)
 static void protocol_task(void *arg)
 {
     (void)arg;
-    static dollybot_protocol_t protocol;
+    static dollybot_protocol_t protocol = {.tuning = vofa_wifi_publish};
     uint32_t handle = 0;
     int bytes_in_flight = 0;
     bool congested = false;
+    uint8_t last_tuning = TUNE_OFF;
+    TickType_t tuning_sent = 0;
 
     for (;;) {
         spp_event_t event;
-        TickType_t wait = handle == 0 ? portMAX_DELAY : pdMS_TO_TICKS(20);
-        BaseType_t have_event = xQueueReceive(spp_events, &event, wait);
+        BaseType_t have_event = xQueueReceive(spp_events, &event, pdMS_TO_TICKS(10));
         if (have_event == pdPASS) {
             switch (event.kind) {
             case SPP_LINK_OPEN:
                 handle = event.handle;
-                protocol = (dollybot_protocol_t){0};
+                protocol = (dollybot_protocol_t){.tuning = vofa_wifi_publish};
                 bytes_in_flight = 0;
                 congested = false;
                 break;
@@ -108,10 +110,21 @@ static void protocol_task(void *arg)
         }
 
         if (handle == 0) {
-            continue;
+            protocol.session = 0;
+            protocol.reply_count = 0;
         }
 
-        uint8_t uart_data[128];
+        TickType_t now = xTaskGetTickCount();
+        uint8_t tuning = vofa_wifi_mode();
+        if (tuning != last_tuning || (tuning && now - tuning_sent >= pdMS_TO_TICKS(TUNE_REFRESH_MS))) {
+            uint8_t request[DOLLY_TUNING_SELECT_FRAME_SIZE];
+            size_t length = dollybot_encode_tuning_selection(request, tuning);
+            stm32_uart_forward(request, length, DOLLY_TUNING_SELECT, false);
+            last_tuning = tuning;
+            tuning_sent = now;
+        }
+
+        uint8_t uart_data[256];
         int uart_length = stm32_uart_read(uart_data, sizeof(uart_data));
         if (uart_length > 0 && !dollybot_feed_stm32(&protocol, uart_data, (size_t)uart_length)) {
             ESP_LOGW(TAG, "DollyBot UART response queue overflow");
@@ -120,7 +133,7 @@ static void protocol_task(void *arg)
             continue;
         }
 
-        if (bytes_in_flight != 0 || congested) {
+        if (handle == 0 || bytes_in_flight != 0 || congested) {
             continue;
         }
         // Preserve response order, with at most one SPP write in flight.
@@ -240,6 +253,8 @@ void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
     stm32_uart_init();
+
+    ESP_ERROR_CHECK_WITHOUT_ABORT(vofa_wifi_start());
 
     spp_events = xQueueCreate(8, sizeof(spp_event_t));
     if (spp_events == NULL) {

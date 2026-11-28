@@ -12,6 +12,7 @@ enum {
     CRC_SIZE = 2,
     MAX_PAYLOAD = DOLLYBOT_MAX_FRAME - HEADER_SIZE - CRC_SIZE,
     STATUS_PAYLOAD_SIZE = 34,
+    POWER_STATUS_PAYLOAD_SIZE = 10,
 };
 
 enum {
@@ -25,6 +26,7 @@ enum {
     ACK = 0x80,
     STATUS = 0x90,
     POINT = 0x91,
+    POWER_STATUS = 0x92,
 };
 
 enum {
@@ -86,6 +88,14 @@ static size_t encode(uint8_t *out, uint8_t type, uint16_t seq, uint32_t session,
     memcpy(out + HEADER_SIZE, payload, length);
     write_u16(out + HEADER_SIZE + length, crc16(out + 2, HEADER_SIZE + length - 2));
     return HEADER_SIZE + length + CRC_SIZE;
+}
+
+size_t dollybot_encode_tuning_selection(uint8_t output[DOLLY_TUNING_SELECT_FRAME_SIZE], uint8_t mode)
+{
+    if (mode > TUNE_ODOM) {
+        return 0;
+    }
+    return encode(output, DOLLY_TUNING_SELECT, 0, 0, &mode, 1);
 }
 
 void dollybot_close_session(uint32_t session, dollybot_forward_fn forward)
@@ -218,7 +228,19 @@ static bool handle_frame(dollybot_protocol_t *protocol, const uint8_t *frame, ui
 
 static bool handle_stm32_frame(dollybot_protocol_t *protocol, const uint8_t *frame, uint16_t length)
 {
-    if (frame[2] != VERSION || protocol->session == 0 || read_u32(frame + 8) != protocol->session) {
+    uint32_t session = read_u32(frame + 8);
+    if (frame[2] != VERSION) {
+        return true;
+    }
+    if (frame[3] == DOLLY_TUNING_TYPE) {
+        const uint8_t *payload = frame + HEADER_SIZE;
+        if (session == 0 && length != 0 && length == tuning_payload_size(payload[0]) &&
+            protocol->tuning != NULL) {
+            protocol->tuning(payload, length);
+        }
+        return true;
+    }
+    if (protocol->session == 0 || session != protocol->session) {
         return true;
     }
 
@@ -230,6 +252,11 @@ static bool handle_stm32_frame(dollybot_protocol_t *protocol, const uint8_t *fra
         break;
     case ACK:
         if (length != 6 || (!is_stm32_command(frame[HEADER_SIZE]) && frame[HEADER_SIZE] != DOLLYBOT_MOTION && frame[HEADER_SIZE] != GIMBAL)) {
+            return true;
+        }
+        break;
+    case POWER_STATUS:
+        if (length != POWER_STATUS_PAYLOAD_SIZE) {
             return true;
         }
         break;

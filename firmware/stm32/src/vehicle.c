@@ -1,23 +1,31 @@
 #include "vehicle.h"
+#include "power_config.h"
 #include "wire.h"
+#include "tuning_wire.h"
 #include "task_store.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
 
 enum { OK, BAD_STATE, UNCALIBRATED, BAD_ARG, WRONG_FRAME, UNSUPPORTED };
+enum { MAX_SAMPLE_GAP_MS = 25 };
 static Chassis chassis;
 static Player player;
 static Twist manual;
 static uint32_t session, started, last_contact, deadline, next_status, frame_id, teach_id,
     point_index;
-static uint32_t run_id, last_sample, still_ms;
-static uint16_t motion_seq, fence, status_seq;
+static uint32_t run_id, last_sample, still_ms, next_power_status;
+static uint16_t motion_seq, fence, status_seq, tuning_seq;
+static uint32_t next_tuning, tuning_refreshed;
+static uint8_t tuning_mode;
 static uint8_t teaching;
-static bool authorized, calibrated, healthy, timed_out, voltage_ok, servo_ok, servo_requested;
+static bool authorized, calibrated, healthy, timed_out, voltage_ok, servo_requested;
 static float bias, stationary_mean, requested_pan, requested_tilt;
 static unsigned stationary_count;
-static uint32_t servo_overload_ms;
+static uint32_t motor_overload_ms, gimbal_overload_ms;
+static uint8_t power_faults;
+static float filtered_battery_v;
+static bool power_sample_valid;
 typedef struct {
     uint16_t seq, crc;
     uint8_t type, len, frame[48];
@@ -33,7 +41,7 @@ static void halt(void) {
     manual = (Twist){0};
     memset(chassis.integral, 0, sizeof chassis.integral);
     memset(chassis.setpoint, 0, sizeof chassis.setpoint);
-    chassis.turn_integral = 0;
+    chassis.turn_integral = chassis.turn_output = 0;
     if (playing())
         player.phase = IDLE;
     run_id = 0;
@@ -50,7 +58,10 @@ void vehicle_link_lost(void) {
 void vehicle_init(void) {
     store_init();
     vehicle_link_lost();
-    servo_ok = true;
+    power_faults = 0;
+    motor_overload_ms = gimbal_overload_ms = 0;
+    voltage_ok = power_sample_valid = false;
+    tuning_mode = TUNE_OFF;
 }
 static void emit(uint8_t type, uint16_t seq, const uint8_t *data, unsigned n, Reply *saved) {
     uint8_t packet[48];
@@ -80,12 +91,83 @@ static void status(void) {
         last_sample = u32(p);
     }
     p[22] = teaching;
+    bool gimbal_trip = (power_faults & POWER_GIMBAL_TRIP) != 0;
     p[23] = (uint8_t)(calibrated | timed_out << 1 | (!healthy) << 2 | (!voltage_ok) << 3 |
-                      (!servo_ok) << 4 | player.phase << 5);
+                      gimbal_trip << 4 | player.phase << 5);
     put32(p + 24, teach_id);
     put32(p + 28, point_index);
     put16(p + 32, motion_seq);
     emit(STATUS, ++status_seq, p, sizeof p, NULL);
+}
+static void power_status(const Sensors *s) {
+    uint8_t p[POWER_STATUS_SIZE];
+    put16(p, power_sample_valid ? (uint16_t)lroundf(filtered_battery_v * 1000) : UINT16_MAX);
+    put32(p + 2, power_sample_valid ? (uint32_t)lroundf(s->motor_a * 1000) : UINT32_MAX);
+    put16(p + 6, power_sample_valid ? (uint16_t)lroundf(s->gimbal_a * 1000) : UINT16_MAX);
+    float percent = (filtered_battery_v - BATTERY_MIN_V) *
+                    (100.0f / (BATTERY_FULL_V - BATTERY_MIN_V));
+    p[8] = power_sample_valid ? (uint8_t)lroundf(fmaxf(0, fminf(100, percent))) : UINT8_MAX;
+    p[9] = power_faults | (power_sample_valid && !voltage_ok ? POWER_BATTERY_RANGE : 0);
+    emit(POWER_STATUS, ++status_seq, p, sizeof p, NULL);
+}
+static void tuning_sample(const Sensors *s, const float duty[4], float rate_target, uint32_t now) {
+    bool configured = geometry_valid(&geometry);
+    bool pose_valid = healthy && calibrated;
+    bool yaw_active = authorized && playing();
+    float values[TUNE_MAX_CHANNELS] = {(float)now};
+    values[TUNE_FLAGS] = (float)((authorized ? TUNE_DRIVE_AUTHORIZED : 0) |
+                                 (healthy ? TUNE_IMU_VALID : 0) |
+                                 (calibrated ? TUNE_CALIBRATED : 0) |
+                                 (configured ? TUNE_GEOMETRY_VALID : 0) |
+                                 (yaw_active ? TUNE_REPLAY_YAW_ACTIVE : 0) |
+                                 (voltage_ok ? TUNE_VOLTAGE_OK : 0) |
+                                 (power_faults ? TUNE_POWER_FAULT : 0));
+    float *data = values + TUNE_DATA;
+    switch (tuning_mode) {
+    case TUNE_SPEED:
+        for (unsigned i = 0; i < 4; ++i) {
+            data[i] = chassis.setpoint[i];
+            data[4 + i] = pose_valid && configured ? chassis.wheel_speed[i] : 0;
+            data[8 + i] = duty[i] * 100;
+        }
+        break;
+    case TUNE_RATE:
+        data[0] = authorized ? rate_target : 0;
+        data[1] = healthy ? s->clockwise_dps - (calibrated ? bias : 0) : 0;
+        data[2] = chassis.turn_output;
+        break;
+    case TUNE_ANGLE:
+        data[0] = yaw_active ? angle_delta(player.target_yaw, 0) : 0;
+        data[1] = pose_valid ? chassis.pose.yaw : 0;
+        data[2] = yaw_active ? angle_delta(player.target_yaw, chassis.pose.yaw) : 0;
+        data[3] = (float)player.phase;
+        break;
+    case TUNE_ODOM: {
+        int64_t total = 0;
+        for (unsigned i = 0; i < 4; ++i) {
+            data[i] = (float)s->encoder_total[i];
+            total += s->encoder_total[i];
+        }
+        data[4] = (float)total;
+        data[5] = pose_valid ? chassis.pose.x : 0;
+        data[6] = pose_valid ? chassis.pose.y : 0;
+        data[7] = isfinite(geometry.odometry_scale) ? geometry.odometry_scale : 0;
+        break;
+    }
+    default:
+        return;
+    }
+
+    uint8_t payload[TUNE_MAX_PAYLOAD] = {tuning_mode}, frame[TUNE_MAX_PAYLOAD + 14];
+    unsigned count = tuning_channel_count(tuning_mode);
+    for (unsigned i = 0; i < count; ++i) {
+        uint32_t bits;
+        memcpy(&bits, &values[i], sizeof bits);
+        put32(payload + 1 + 4 * i, bits);
+    }
+    size_t length = wire_encode(frame, DOLLY_TUNING_TYPE, ++tuning_seq, 0, payload,
+                                (uint16_t)tuning_payload_size(tuning_mode));
+    board_send_tuning(frame, (unsigned)length);
 }
 static bool later(uint16_t a, uint16_t b) { return (int16_t)(a - b) > 0; }
 void vehicle_frame(const uint8_t *f) {
@@ -94,14 +176,25 @@ void vehicle_frame(const uint8_t *f) {
     uint16_t seq = u16(f + 4), crc = u16(f + 12 + n);
     uint8_t type = f[3], result = OK;
     const uint8_t *p = f + 12;
-    if (f[2] != 1 || !sid)
+    if (f[2] != 1)
+        return;
+    if (type == DOLLY_TUNING_SELECT) {
+        if (!sid && n == 1 && p[0] <= TUNE_ODOM) {
+            if (tuning_mode != p[0])
+                next_tuning = now;
+            tuning_mode = p[0];
+            tuning_refreshed = now;
+        }
+        return;
+    }
+    if (!sid)
         return;
     if (type == HELLO && !n && session != sid) {
         vehicle_link_lost();
         session = sid;
         started = now;
         fence = seq;
-        next_status = now;
+        next_status = next_power_status = now;
     }
     if (session != sid)
         return;
@@ -127,7 +220,10 @@ void vehicle_frame(const uint8_t *f) {
         reply = &cache[cache_index++ % 32];
         *reply = (Reply){.seq = seq, .crc = crc, .type = type};
     }
-    bool can_move = calibrated && healthy && voltage_ok && geometry_valid(&geometry);
+    bool can_move = calibrated && healthy && voltage_ok && !power_faults &&
+                    geometry_valid(&geometry);
+    if (power_faults && stream)
+        return;
     if (type != STOP && type != CAPABILITIES && !later(seq, fence))
         result = BAD_STATE;
     else
@@ -205,7 +301,7 @@ void vehicle_frame(const uint8_t *f) {
                 result = BAD_ARG;
                 break;
             }
-            if (playing() || !servo_ok || !voltage_ok || store_busy()) {
+            if (playing() || !healthy || !voltage_ok || store_busy()) {
                 result = BAD_STATE;
                 break;
             }
@@ -297,7 +393,7 @@ void vehicle_frame(const uint8_t *f) {
                 result = BAD_ARG;
                 break;
             }
-            if (!can_move || !servo_ok) {
+            if (!can_move) {
                 result = UNCALIBRATED;
                 break;
             }
@@ -337,17 +433,48 @@ void vehicle_frame(const uint8_t *f) {
         next_status = now + 50;
     }
 }
+static void sample_power(const Sensors *s, uint32_t ms) {
+    /* A long gap is not evidence that the current stayed high throughout it. */
+    if (ms > MAX_SAMPLE_GAP_MS || !s->power_valid)
+        motor_overload_ms = gimbal_overload_ms = 0;
+    if (ms > MAX_SAMPLE_GAP_MS)
+        ms = 5;
+
+    voltage_ok = s->power_valid && s->battery_v >= BATTERY_MIN_V && s->battery_v <= BATTERY_MAX_V;
+    if (!s->power_valid) {
+        power_faults |= POWER_ADC_FAULT;
+        power_sample_valid = false;
+        return;
+    }
+
+    if (power_sample_valid)
+        filtered_battery_v += (s->battery_v - filtered_battery_v) * (ms / 250.0f);
+    else
+        filtered_battery_v = s->battery_v;
+    power_sample_valid = true;
+    if (!(power_faults & POWER_MOTOR_TRIP)) {
+        motor_overload_ms = s->motor_a >= MOTOR_OVERCURRENT_A ? motor_overload_ms + ms : 0;
+        if (motor_overload_ms >= MOTOR_OVERCURRENT_MS)
+            power_faults |= POWER_MOTOR_TRIP;
+    }
+    if (!(power_faults & POWER_GIMBAL_TRIP)) {
+        gimbal_overload_ms = s->gimbal_a >= GIMBAL_OVERCURRENT_A ? gimbal_overload_ms + ms : 0;
+        if (gimbal_overload_ms >= GIMBAL_OVERCURRENT_MS)
+            power_faults |= POWER_GIMBAL_TRIP;
+    }
+}
 void vehicle_tick(Sensors s, uint32_t ms) {
     uint32_t now = board_now();
+    uint8_t previous_faults = power_faults;
+    sample_power(&s, ms);
     bool stationary_gap =
         resample_after_save && fabsf(s.clockwise_dps - bias) < .35f && fabsf(s.accel_g - 1) < .12f;
     for (unsigned i = 0; i < 4; ++i)
         stationary_gap = stationary_gap && s.counts[i] == 0;
-    if (ms > 25 && stationary_gap)
+    if (ms > MAX_SAMPLE_GAP_MS && stationary_gap)
         ms = 5;
     resample_after_save = false;
-    healthy = s.valid && ms && ms <= 25 && isfinite(s.clockwise_dps) && isfinite(s.accel_g);
-    voltage_ok = s.battery_v >= 9.6f && s.battery_v <= 13.2f;
+    healthy = s.valid && ms && ms <= MAX_SAMPLE_GAP_MS && isfinite(s.clockwise_dps) && isfinite(s.accel_g);
     bool quiet = healthy && fabsf(s.clockwise_dps) < 3 && fabsf(s.accel_g - 1) < .12f;
     for (unsigned i = 0; i < 4; ++i)
         quiet = quiet && s.counts[i] == 0;
@@ -365,13 +492,15 @@ void vehicle_tick(Sensors s, uint32_t ms) {
         estimate(&chassis, &geometry, s.counts, s.clockwise_dps - bias, ms * .001f);
     if (!healthy)
         calibrated = false;
-    if (!healthy || !voltage_ok) {
+    if (!healthy || !voltage_ok || power_faults) {
         bool active = playing();
         halt();
         if (active)
             player.phase = TRACK_FAULT;
         teaching = 0;
         servo_requested = false;
+        if (power_faults != previous_faults)
+            store_abort();
     }
     if (session && now - last_contact >= 3000)
         vehicle_link_lost();
@@ -388,27 +517,29 @@ void vehicle_tick(Sensors s, uint32_t ms) {
         if (!playing())
             halt();
     }
+    float duty[4] = {0};
     if (authorized) {
-        float duty[4];
         wheel_control(&chassis, &geometry, v, ms * .001f, duty);
         board_drive(duty, deadline);
     }
-    servo_overload_ms = servo_requested && s.gimbal_a > 2.5f ? servo_overload_ms + ms : 0;
-    if (servo_overload_ms >= 500) {
-        servo_ok = false;
-        bool active = playing();
-        halt();
-        if (active)
-            player.phase = TRACK_FAULT;
-    }
-    if (servo_requested && servo_ok) {
+    if (servo_requested) {
         float maxstep = 90 * ms * .001f;
         chassis.pose.pan += fmaxf(-maxstep, fminf(maxstep, requested_pan - chassis.pose.pan));
         chassis.pose.tilt += fmaxf(-maxstep, fminf(maxstep, requested_tilt - chassis.pose.tilt));
     }
-    board_servo(&chassis.pose.pan, &chassis.pose.tilt, servo_requested && voltage_ok && servo_ok);
+    board_servo(&chassis.pose.pan, &chassis.pose.tilt, servo_requested);
     if (session && (int32_t)(now - next_status) >= 0) {
         status();
         next_status = now + 50;
+    }
+    if (session && ((int32_t)(now - next_power_status) >= 0 || power_faults != previous_faults)) {
+        power_status(&s);
+        next_power_status = now + 200;
+    }
+    if (tuning_mode && now - tuning_refreshed >= TUNE_SELECTION_MS)
+        tuning_mode = TUNE_OFF;
+    if (tuning_mode && (int32_t)(now - next_tuning) >= 0) {
+        tuning_sample(&s, duty, v.turn, now);
+        next_tuning = now + TUNE_PERIOD_MS;
     }
 }

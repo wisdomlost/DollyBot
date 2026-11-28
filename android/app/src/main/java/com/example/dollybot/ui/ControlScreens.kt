@@ -91,7 +91,11 @@ internal fun ControlScreen(
         ),
         isError = state.device.connection == ConnectionStatus.Error
     )
-    val drivingEnabled = !state.recording.blocksDriving
+    val powerTripped = state.device.power?.tripped == true
+    if (state.device.connection == ConnectionStatus.Connected) {
+        Panel { PowerSummary(state.device, showCurrents = false) }
+    }
+    val drivingEnabled = !state.recording.blocksDriving && !powerTripped
     if (state.teaching.activeMode == 1 || state.teaching.activeMode == 3) {
         NavigationRow(
             stringResource(if (state.teaching.activeMode == 3) R.string.push_recording else R.string.recording) +
@@ -217,7 +221,7 @@ internal fun ControlScreen(
                         onGimbalChange(it.x * PanRange, it.y * TiltRange)
                     },
                     onRelease = {},
-                    modifier = Modifier.testTag("gimbal_joystick")
+                    modifier = Modifier.testTag("gimbal_joystick"), enabled = !powerTripped
                 )
                 Text(
                     stringResource(R.string.gimbal_hold_hint),
@@ -334,6 +338,29 @@ private fun RotationButton(
 }
 
 @Composable
+private fun PowerSummary(state: DeviceUiState, showCurrents: Boolean) {
+    val readings = state.power?.readings
+    if (readings == null) {
+        Text(stringResource(R.string.power_readings_unavailable))
+    } else {
+        Text(stringResource(R.string.power_battery, readings.batteryMv / 1000.0, readings.batteryPercent))
+        if (showCurrents) {
+            InfoRow(
+                stringResource(R.string.power_motor_current),
+                stringResource(R.string.power_current_value, readings.motorMa / 1000.0)
+            )
+            InfoRow(
+                stringResource(R.string.power_gimbal_current),
+                stringResource(R.string.power_current_value, readings.gimbalMa / 1000.0)
+            )
+        }
+    }
+    state.powerAlert?.let {
+        Text(stringResource(it), color = MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
 internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
     val isError = state.connection == ConnectionStatus.Error
     val feedback = when (state.connection) {
@@ -397,6 +424,10 @@ internal fun DeviceScreen(state: DeviceUiState, actions: DollyBotActions) {
             enabled = state.live && state.available &&
                 (connected || connecting || !state.permissionGranted || state.selectedAddress != null)
         )
+        if (connected) {
+            HorizontalDivider()
+            PowerSummary(state, showCurrents = true)
+        }
         HorizontalDivider()
         InfoRow(
             stringResource(R.string.calibration_status),

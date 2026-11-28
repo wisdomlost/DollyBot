@@ -85,6 +85,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     private var gimbalInitialized = false
     private var endingTeachId: Long? = null
     private var lastStatusAt = 0L
+    private var lastPowerAt = 0L
     private data class Pending(val type: Int, val reply: CompletableDeferred<Packet>)
     private val pending = mutableMapOf<Int, Pending>()
     private val storageMutex = Mutex()
@@ -222,6 +223,11 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                         while (true) {
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastStatusAt > 3000) throw IOException(text(R.string.telemetry_timeout))
+                            if (now - lastPowerAt > 1500 && state.value.device.power?.readings != null) {
+                                mutableState.update { it.copy(device = it.device.copy(
+                                    power = it.device.power?.copy(readings = null)
+                                )) }
+                            }
                             if (runToken != 0L && foreground) {
                                 link?.send(Packet(Wire.LEASE,nextSequence(),session,Wire.buffer(4).putInt(runToken.toInt()).array()))
                             } else if (!replayStarting) sendMotion()
@@ -278,7 +284,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
 
     override fun move(input: MotionInput) {
         if (!controlActive) return
-        if (state.value.recording.blocksDriving) {
+        if (state.value.recording.blocksDriving || state.value.device.power?.tripped == true) {
             motion = MotionInput()
             return
         }
@@ -304,7 +310,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     override fun adjustGimbal(axis: GimbalAxis, degrees: Float) {
-        if (!controlActive) return
+        if (!controlActive || state.value.device.power?.tripped == true) return
         if (axis == GimbalAxis.Yaw) yaw = degrees.coerceIn(-60f, 60f)
         else pitch = degrees.coerceIn(-40f, 40f)
         gimbalDirty = true
@@ -579,6 +585,7 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     override fun startReplay(repeats: Int) {
         val frame = state.value.teaching?.pose?.frameId ?: return
         if (!foreground || replayStarting || runToken != 0L || !state.value.device.calibrated ||
+            state.value.device.power?.tripped == true ||
             state.value.trajectoryUpload?.sending == true || repeats !in 1..20) return
         replayStarting = true
         val generation = ++replayGeneration
@@ -840,7 +847,9 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                     }
                     val phase = status.flags ushr 5
                     if (!replayStarting && runToken != 0L && phase !in 1..3) runToken = 0
+                    val powerAlert = state.value.device.powerAlert
                     val replayLabel = when {
+                        powerAlert != null -> text(powerAlert)
                         status.flags and 8 != 0 -> "电池电压异常"
                         status.flags and 4 != 0 -> "IMU 采样异常，请停稳并重新校准"
                         status.flags and 16 != 0 -> "云台过流，已断电"
@@ -886,6 +895,25 @@ internal class DollyBotViewModel @JvmOverloads constructor(
                         endingTeachId == null &&
                         state.value.recording.stage == RecordingStage.Recording
                     ) finalizeRecording(interrupted = true)
+                }
+                Wire.POWER_STATUS -> {
+                    val power = PowerStatus.decode(packet.payload)
+                    lastPowerAt = SystemClock.elapsedRealtime()
+                    if (power.tripped && state.value.device.power?.tripped != true) {
+                        motion = MotionInput()
+                        gimbalDirty = false
+                        runToken = 0
+                        replayStarting = false
+                        replayGeneration++
+                        link?.discardControlPackets()
+                    }
+                    mutableState.update { current ->
+                        val device = current.device.copy(power = power)
+                        current.copy(
+                            device = device,
+                            replayState = device.powerAlert?.let(::text) ?: current.replayState
+                        )
+                    }
                 }
                 Wire.ACK, Wire.POINT -> {
                     val expected = pending[packet.seq] ?: return
@@ -940,7 +968,8 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     }
 
     private fun sendMotion() {
-        if (!controlActive || state.value.recording.blocksDriving) return
+        if (!controlActive || state.value.recording.blocksDriving ||
+            state.value.device.power?.tripped == true) return
         val data = Wire.buffer(6)
             .putShort((motion.strafe * 1000).roundToInt().toShort())
             .putShort((motion.forward * 1000).roundToInt().toShort())
@@ -965,8 +994,11 @@ internal class DollyBotViewModel @JvmOverloads constructor(
     )
 
     private fun releaseConnection() {
+        session = 0
         runToken=0; replayStarting=false; replayGeneration++
-        mutableState.update { it.copy(storedTask=false,trajectoryUpload=null,replayState="") }
+        lastPowerAt = 0
+        mutableState.update { it.copy(storedTask=false,trajectoryUpload=null,replayState="",
+            device = it.device.copy(power = null)) }
         pump?.cancel()
         heartbeat?.cancel()
         teachingJob?.cancel()

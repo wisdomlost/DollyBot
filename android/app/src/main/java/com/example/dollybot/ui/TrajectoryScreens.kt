@@ -54,19 +54,25 @@ internal fun TrajectoryListScreen(
     val trajectories = if (examples) emptyList() else state.trajectories.filter { it.kind == kind && !it.isDraft }
     val connected = state.device.connection == ConnectionStatus.Connected
     val upload = state.trajectoryUpload
+    val powerTripped = state.device.power?.tripped == true
     val confirm = remember { mutableStateOf(false) }
     val loops = state.storedRepeats
     if (confirm.value) AlertDialog(onDismissRequest={confirm.value=false},
         title={Text("开始回放车端最近保存的轨迹？")},
         text={Text("请确认小车的坐标参考和车头方向与录制时一致。若已搬动车辆或重新上电，请先在原校准标记处按原朝向重新校准。确认后将低速返回首点，执行 ${loops} 轮。")},
-        confirmButton={TextButton(onClick={confirm.value=false;onStart(loops)}) {Text("确认并回首点")}},
+        confirmButton={TextButton(enabled = !powerTripped, onClick={confirm.value=false;onStart(loops)}) {Text("确认并回首点")}},
         dismissButton={TextButton(onClick={confirm.value=false}) {Text("取消")}})
     Column(modifier.fillMaxSize()) {
         if (connected) Row(verticalAlignment=Alignment.CenterVertically) {
-            TextButton(enabled=state.storedTask && state.device.calibrated && upload?.sending != true,
+            TextButton(enabled=state.storedTask && state.device.calibrated && upload?.sending != true && !powerTripped,
                 onClick={confirm.value=true}) {Text("开始车端回放")}
             TextButton(onClick=onStop) {Text("停止")}
-            Text(if (state.chassisConfigured) state.replayState else "请先设置惯导系数")
+            val powerAlert = state.device.powerAlert
+            Text(when {
+                powerAlert != null -> stringResource(powerAlert)
+                state.chassisConfigured -> state.replayState
+                else -> "请先设置惯导系数"
+            })
         }
         PrimaryTabRow(selectedTabIndex = if (examples) 0 else 1, containerColor = MaterialTheme.colorScheme.surface) {
             Tab(selected = examples, onClick = { onSourceChange(true) },

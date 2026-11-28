@@ -1,9 +1,10 @@
 #include "platform.h"
 #include "chassis_config.h"
+#include "control_config.h"
 #include "stm32f405xx.h"
 #include <math.h>
 
-const Geometry geometry = {惯导系数, 500, 600, .0018f, .002f, MOTOR_POLARITIES};
+const Geometry geometry = {惯导系数, 500, 600, WHEEL_SPEED_KP, WHEEL_SPEED_KI, MOTOR_POLARITIES};
 static const int encoder_polarity[4] = ENCODER_POLARITIES;
 /* Keil Watch: cumulative signed quadrature counts even before calibration. */
 volatile int64_t wheel_counts[4];
@@ -98,18 +99,26 @@ bool board_rx_lost(void) {
     __enable_irq();
     return lost;
 }
-void board_send(const uint8_t *p, unsigned n) {
+static bool queue_uart_tx(const uint8_t *p, unsigned n, unsigned reserve) {
     unsigned available = (tx_tail + sizeof tx - tx_head - 1) % sizeof tx;
-    if (n > available) {
-        rx_overflow = true;
-        board_stop();
-        return;
-    }
+    if (n + reserve > available)
+        return false;
     for (unsigned i = 0; i < n; ++i) {
         tx[tx_head] = p[i];
         tx_head = (tx_head + 1) % sizeof tx;
     }
     USART3->CR1 |= USART_CR1_TXEIE;
+    return true;
+}
+void board_send(const uint8_t *p, unsigned n) {
+    if (!queue_uart_tx(p, n, 0)) {
+        rx_overflow = true;
+        board_stop();
+    }
+}
+void board_send_tuning(const uint8_t *p, unsigned n) {
+    /* Drop debug samples before consuming space reserved for control responses. */
+    (void)queue_uart_tx(p, n, 512);
 }
 uint32_t board_frame_id(void) {
     for (unsigned i = 0; i < 100000; ++i)
@@ -169,13 +178,21 @@ static void pwm(TIM_TypeDef *t, unsigned prescale, unsigned period) {
     t->EGR = 1;
     t->CR1 = 0x81;
 }
-static float adc(unsigned channel) {
+static bool adc_voltage(unsigned channel, float *voltage) {
+    ADC1->SR = 0;
     ADC1->SQR3 = channel;
     ADC1->CR2 |= ADC_CR2_SWSTART;
-    unsigned timeout = 50000;
-    while (!(ADC1->SR & ADC_SR_EOC) && --timeout) {
+    uint32_t start = TIM5->CNT;
+    while (!(ADC1->SR & ADC_SR_EOC)) {
+        if (TIM5->CNT - start >= 100) {
+            /* Cancel this conversion before selecting a different channel. */
+            ADC1->CR2 = 0;
+            ADC1->CR2 = ADC_CR2_ADON;
+            return false;
+        }
     }
-    return timeout ? ADC1->DR * (3.3f / 4095) : 0;
+    *voltage = ADC1->DR * (3.3f / 4095);
+    return true;
 }
 Sensors board_sample(void) {
     static uint16_t previous[4];
@@ -186,9 +203,16 @@ Sensors board_sample(void) {
         s.counts[i] = (int16_t)((int16_t)(now - previous[i]) * encoder_polarity[i]);
         previous[i] = now;
         wheel_counts[i] += s.counts[i];
+        s.encoder_total[i] = wheel_counts[i];
     }
-    s.battery_v = adc(10) * (122.0f / 22);
-    s.gimbal_a = adc(11) / (.010f * 20);
+    float battery_adc, motor_adc, gimbal_adc;
+    s.power_valid = adc_voltage(10, &battery_adc) && adc_voltage(5, &motor_adc) &&
+                    adc_voltage(11, &gimbal_adc);
+    if (s.power_valid) {
+        s.battery_v = battery_adc * ((100.0f + 22.0f) / 22.0f);
+        s.motor_a = motor_adc / (.0005f * 20); /* PA5, motor INA181A1 */
+        s.gimbal_a = gimbal_adc / (.010f * 20); /* PC1, gimbal INA181A1 */
+    }
     uint8_t data[12];
     spi_error = false;
     imu_read(0x1f, data, sizeof data);
@@ -237,6 +261,8 @@ void board_servo(float *pan, float *tilt, bool enable) {
     static uint32_t since;
     if (!enable) {
         gpio(GPIOC, 15, false);
+        TIM12->CCR1 = 0;
+        TIM12->CCR2 = 0;
         prepping = false;
         return;
     }
@@ -316,8 +342,10 @@ void board_init(void) {
     TIM12->CCR2 = TILT_CENTER_US;
     pin(GPIOC, 0, 3, 0);
     pin(GPIOC, 1, 3, 0);
+    pin(GPIOA, 5, 3, 0);
     ADC->CCR = ADC_CCR_ADCPRE_0;
     ADC1->SMPR1 = (6u << 0) | (6u << 3);
+    ADC1->SMPR2 = 7u << (5 * 3); /* 480 cycles for the filtered motor channel */
     ADC1->CR2 = ADC_CR2_ADON;
     pin(GPIOB, 13, 2, 5);
     pin(GPIOC, 2, 2, 5);

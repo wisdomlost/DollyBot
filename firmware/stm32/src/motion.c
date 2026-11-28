@@ -1,4 +1,5 @@
 #include "motion.h"
+#include "control_config.h"
 #include <math.h>
 #include <string.h>
 
@@ -40,10 +41,11 @@ void wheel_control(Chassis *c, const Geometry *g, Twist v, float dt, float duty[
      * speed, so wheelbase and track width are not calibration inputs. */
     float yaw_error = v.turn - c->yaw_rate;
     float turn_limit = g->max_wheel_speed * .65f;
-    float turn_output = 1.8f * yaw_error + c->turn_integral;
+    float turn_output = YAW_RATE_KP * yaw_error + c->turn_integral;
     if (fabsf(turn_output) < turn_limit || turn_output * yaw_error < 0)
-        c->turn_integral = limit(c->turn_integral + 5.0f * yaw_error * dt, turn_limit);
-    float r = v.right, f = v.forward, t = limit(turn_output, turn_limit);
+        c->turn_integral = limit(c->turn_integral + YAW_RATE_KI * yaw_error * dt, turn_limit);
+    c->turn_output = limit(turn_output, turn_limit);
+    float r = v.right, f = v.forward, t = c->turn_output;
     float targets[4] = {f + r + t, f - r - t, f - r + t, f + r - t};
     float peak = g->max_wheel_speed;
     for (unsigned i = 0; i < 4; ++i)
@@ -59,7 +61,7 @@ void wheel_control(Chassis *c, const Geometry *g, Twist v, float dt, float duty[
     }
 }
 void player_start(Player *p, unsigned loops, float yaw) {
-    *p = (Player){.phase = RETURNING, .loops = loops, .hold_yaw = yaw};
+    *p = (Player){.phase = RETURNING, .loops = loops, .hold_yaw = yaw, .target_yaw = yaw};
 }
 Twist player_tick(Player *p, const Chassis *c, uint32_t dt, uint32_t count, ReadSample read_sample,
                   float *pan, float *tilt) {
@@ -82,6 +84,7 @@ Twist player_tick(Player *p, const Chassis *c, uint32_t dt, uint32_t count, Read
     float dy = a.pose.y + u * (b.pose.y - a.pose.y) - c->pose.y;
     float yaw =
         p->phase == RETURNING ? p->hold_yaw : a.pose.yaw + u * angle_delta(b.pose.yaw, a.pose.yaw);
+    p->target_yaw = yaw;
     float dyaw = angle_delta(yaw, c->pose.yaw);
     float dist = hypotf(dx, dy);
     bool close = dist < 12 && fabsf(dyaw) < 3;
@@ -93,7 +96,7 @@ Twist player_tick(Player *p, const Chassis *c, uint32_t dt, uint32_t count, Read
     /* A programmed dwell starts only after actual arrival and wheel settling. */
     if (seconds >= .15f && a.pose.x == b.pose.x && a.pose.y == b.pose.y && a.pose.yaw == b.pose.yaw)
         track = close && still;
-    float vx = 2 * dx, vy = 2 * dy, omega = 2.5f * dyaw;
+    float vx = 2 * dx, vy = 2 * dy, omega = REPLAY_YAW_KP * dyaw;
     *pan = a.pose.pan + u * (b.pose.pan - a.pose.pan);
     *tilt = a.pose.tilt + u * (b.pose.tilt - a.pose.tilt);
     if (p->phase == RETURNING && dist < 12) {

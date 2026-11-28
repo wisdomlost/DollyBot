@@ -5,6 +5,7 @@
 - STM32 固件和调试入口为 [Keil 工程](firmware/stm32/MDK-ARM/DollyBot.uvprojx)，引脚和时钟配置见 [CubeMX 文件](firmware/stm32/DollyBot.ioc)。
 - 蓝牙固件在 `firmware/esp32/` 内运行 `idf.py build`。Android 工程在 `android/` 内运行 `.\gradlew.bat testDebugUnitTest assembleDebug`。
 - 首次调车只需填写一个距离参数 **惯导系数**。标定、录制、手动确认回放和验收步骤见[整车联调说明](docs/replay.md)。
+- [VOFA+ 无线调参](docs/vofa.md)记录 Wi-Fi 设置、波形通道和标定步骤。
 
 ## 原有 ESP32 网页控制工程
 

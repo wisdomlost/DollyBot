@@ -107,7 +107,7 @@ private fun DollyBotNavigation(state: DollyBotUiState, actions: DollyBotActions,
         actions.stopMotion()
     }
 
-    LaunchedEffect(state.recording.blocksDriving) {
+    LaunchedEffect(state.recording.blocksDriving, state.device.power?.tripped) {
         strafe = 0f
         forward = 0f
         turningLeft = false

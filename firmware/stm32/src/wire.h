@@ -20,7 +20,15 @@ enum {
     ACK = 0x80,
     STATUS = 0x90,
     POINT = 0x91,
+    POWER_STATUS = 0x92,
     MAX_FRAME = 270
+};
+enum {
+    POWER_STATUS_SIZE = 10,
+    POWER_MOTOR_TRIP = 1u << 0,
+    POWER_GIMBAL_TRIP = 1u << 1,
+    POWER_ADC_FAULT = 1u << 2,
+    POWER_BATTERY_RANGE = 1u << 3
 };
 static inline uint16_t u16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
 static inline uint32_t u32(const uint8_t *p) { return u16(p) | (uint32_t)u16(p + 2) << 16; }

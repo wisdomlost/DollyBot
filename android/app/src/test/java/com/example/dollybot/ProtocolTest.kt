@@ -4,6 +4,7 @@ import com.example.dollybot.connection.CarStatus
 import com.example.dollybot.connection.LivePose
 import com.example.dollybot.connection.Packet
 import com.example.dollybot.connection.PacketDecoder
+import com.example.dollybot.connection.PowerStatus
 import com.example.dollybot.connection.TeachingPoint
 import com.example.dollybot.connection.Wire
 import com.example.dollybot.connection.crc16
@@ -87,6 +88,20 @@ class ProtocolTest {
             .putInt(8).putInt(1).putInt(1500).putInt(1).putInt(120).putInt(300)
             .putShort(0).putShort(3000).putShort(-1500).array())
         assertEquals(status.pose, point.pose)
+    }
+
+    @Test
+    fun powerStatusCarriesBatteryCurrentsAndLatchedFaults() {
+        val power = PowerStatus.decode(bytes("B0 36 20 BC 01 00 C4 09 64 03"))
+        assertEquals(PowerStatus.Readings(14000, 113696L, 2500, 100), power.readings)
+        assertTrue(power.tripped && power.motorTrip && power.gimbalTrip)
+        val invalid = PowerStatus.decode(bytes("FF FF FF FF FF FF FF FF FF 04"))
+        assertNull(invalid.readings)
+        assertTrue(invalid.tripped && invalid.adcFault)
+        assertThrows(IllegalArgumentException::class.java) { PowerStatus.decode(ByteArray(9)) }
+        assertThrows(IllegalArgumentException::class.java) {
+            PowerStatus.decode(bytes("B0 36 20 BC 01 00 C4 09 FF 03"))
+        }
     }
 
     @Test

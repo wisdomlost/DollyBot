@@ -17,7 +17,7 @@ typedef struct {
 typedef struct {
     Pose pose;
     float wheel_speed[4], integral[4], setpoint[4];
-    float yaw_rate, turn_integral;
+    float yaw_rate, turn_integral, turn_output;
 } Chassis;
 typedef struct {
     uint32_t time, frame;
@@ -27,7 +27,7 @@ typedef enum { IDLE, RETURNING, ALIGNING, PLAYING, COMPLETE, TRACK_FAULT } Phase
 typedef struct {
     Phase phase;
     uint32_t index, elapsed, settled, delayed, stalled, loops;
-    float hold_yaw;
+    float hold_yaw, target_yaw;
 } Player;
 typedef Sample (*ReadSample)(uint32_t index);
 

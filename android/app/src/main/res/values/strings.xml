@@ -43,6 +43,16 @@
     <string name="uncalibrated">未校准</string>
     <string name="calibrated">已校准</string>
     <string name="device_status">设备状态</string>
+    <string name="power_battery">电池 %1$.2f V · 估算电量 %2$d%%</string>
+    <string name="power_readings_unavailable">暂无车端电源数据</string>
+    <string name="power_motor_current">电机总电流</string>
+    <string name="power_gimbal_current">云台总电流</string>
+    <string name="power_current_value">%1$.2f A</string>
+    <string name="power_motor_overcurrent">电机过流，已停机。排除故障后重新上电。</string>
+    <string name="power_gimbal_overcurrent">云台过流，已停机。排除故障后重新上电。</string>
+    <string name="power_both_overcurrent">电机和云台过流，已停机。排除故障后重新上电。</string>
+    <string name="power_adc_fault">电源采样异常，已停机。排除故障后重新上电。</string>
+    <string name="power_voltage_fault">电池电压超出工作范围，已停止驱动。</string>
     <string name="device_name">设备名称</string>
     <string name="calibration_status">校准状态</string>
     <string name="device_feedback">连接与校准反馈</string>

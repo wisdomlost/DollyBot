@@ -3,6 +3,7 @@ package com.example.dollybot.ui
 import androidx.annotation.StringRes
 import com.example.dollybot.R
 import com.example.dollybot.connection.LivePose
+import com.example.dollybot.connection.PowerStatus
 import com.example.dollybot.trajectory.SavedTrajectory
 import com.example.dollybot.trajectory.TrajectoryEditorState
 
@@ -22,8 +23,20 @@ internal data class DeviceUiState(
     val available: Boolean = true,
     val pairedDevices: List<PairedDevice> = emptyList(),
     val selectedAddress: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val power: PowerStatus? = null
 ) {
+    val powerAlert: Int?
+        get() = when {
+            power == null -> null
+            power.adcFault -> R.string.power_adc_fault
+            power.motorTrip && power.gimbalTrip -> R.string.power_both_overcurrent
+            power.motorTrip -> R.string.power_motor_overcurrent
+            power.gimbalTrip -> R.string.power_gimbal_overcurrent
+            power.batteryOutOfRange -> R.string.power_voltage_fault
+            else -> null
+        }
+
     val calibrationLabel: Int
         get() = if (calibrated) R.string.calibrated else R.string.uncalibrated
 }

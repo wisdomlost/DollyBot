@@ -1,0 +1,18 @@
+menu "DollyBot VOFA+"
+
+config DOLLY_VOFA_WIFI_SSID
+    string "2.4 GHz Wi-Fi SSID"
+    default ""
+
+config DOLLY_VOFA_WIFI_PASSWORD
+    string "WPA2 Wi-Fi password (8-63 characters)"
+    default ""
+
+config DOLLY_VOFA_HOST_IPV4
+    string "IPv4 address of the computer running VOFA+"
+    default ""
+    help
+        The ESP32 connects to the VOFA+ TCP server on port 9000.
+        Leave this empty to keep the Wi-Fi telemetry service disabled.
+
+endmenu

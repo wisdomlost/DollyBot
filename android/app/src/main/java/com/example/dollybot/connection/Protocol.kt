@@ -23,6 +23,7 @@ internal object Wire {
     const val ACK = 0x80
     const val STATUS = 0x90
     const val POINT = 0x91
+    const val POWER_STATUS = 0x92
 
     fun buffer(size: Int): ByteBuffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
     fun read(bytes: ByteArray): ByteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -131,6 +132,41 @@ internal data class CarStatus(
                 Wire.uint(input.int), Wire.uint(input.int),
                 input.short.toInt() and 0xFFFF
             )
+        }
+    }
+}
+
+internal data class PowerStatus(val readings: Readings?, val flags: Int) {
+    data class Readings(
+        val batteryMv: Int,
+        val motorMa: Long,
+        val gimbalMa: Int,
+        val batteryPercent: Int
+    )
+
+    val motorTrip: Boolean get() = flags and 1 != 0
+    val gimbalTrip: Boolean get() = flags and 2 != 0
+    val adcFault: Boolean get() = flags and 4 != 0
+    val batteryOutOfRange: Boolean get() = flags and 8 != 0
+    val tripped: Boolean get() = motorTrip || gimbalTrip || adcFault
+
+    companion object {
+        fun decode(data: ByteArray): PowerStatus {
+            require(data.size == 10)
+            val input = Wire.read(data)
+            val batteryMv = input.short.toInt() and 0xFFFF
+            val motorMa = Wire.uint(input.int)
+            val gimbalMa = input.short.toInt() and 0xFFFF
+            val percent = input.get().toInt() and 0xFF
+            val flags = input.get().toInt() and 0xFF
+            val readings = if (percent == 0xFF) {
+                require(batteryMv == 0xFFFF && motorMa == 0xFFFFFFFFL && gimbalMa == 0xFFFF)
+                null
+            } else {
+                require(percent <= 100 && batteryMv < 0xFFFF && motorMa < 0xFFFFFFFFL && gimbalMa < 0xFFFF)
+                Readings(batteryMv, motorMa, gimbalMa, percent)
+            }
+            return PowerStatus(readings, flags)
         }
     }
 }
