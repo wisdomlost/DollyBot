@@ -1,3 +1,10 @@
+/firmware/esp32/build*/
+/firmware/esp32/sdkconfig*
+!/firmware/esp32/sdkconfig.defaults
+/firmware/stm32/MDK-ARM/Objects/
+/firmware/stm32/MDK-ARM/Listings/
+*.uvguix.*
+*.uvoptx
 /build*/
 /sdkconfig
 /sdkconfig.old

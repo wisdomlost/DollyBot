@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="project_projx.xsd">
+<SchemaVersion>2.1</SchemaVersion><Header>### uVision Project, (C) Keil Software</Header>
+<Targets><Target><TargetName>DollyBot_F405</TargetName><ToolsetNumber>0x4</ToolsetNumber><ToolsetName>ARM-ADS</ToolsetName><uAC6>1</uAC6>
+<TargetOption><TargetCommonOption>
+<Device>STM32F405RGTx</Device><Vendor>STMicroelectronics</Vendor>
+<Cpu>IRAM(0x20000000,0x20000) IROM(0x08000000,0xC0000) CPUTYPE("Cortex-M4") FPU2 CLOCK(84000000) ELITTLE</Cpu>
+<OutputDirectory>.\Objects\</OutputDirectory><OutputName>DollyBot</OutputName><CreateExecutable>1</CreateExecutable><CreateHexFile>1</CreateHexFile><DebugInformation>1</DebugInformation><ListingPath>.\Listings\</ListingPath>
+</TargetCommonOption><TargetArmAds><ArmAdsMisc><AdsCpuType>"Cortex-M4"</AdsCpuType><RvctClst>0</RvctClst><useUlib>0</useUlib><uClangAs>0</uClangAs><hadFPU>1</hadFPU></ArmAdsMisc>
+<Cads><Optim>2</Optim><wLevel>3</wLevel><v6Lang>3</v6Lang><VariousControls><MiscControls>-I../src -I../board -I../vendor/st -I../vendor/cmsis -std=c11 -mfpu=fpv4-sp-d16 -mfloat-abi=hard</MiscControls><Define>STM32F405xx</Define><IncludePath>..\src;..\board;..\vendor\st;..\vendor\cmsis</IncludePath></VariousControls></Cads>
+<LDads><umfTarg>0</umfTarg><ScatterFile>.\DollyBot.sct</ScatterFile><Misc>--map --info=sizes</Misc></LDads></TargetArmAds></TargetOption>
+<Groups><Group><GroupName>Motion and protocol</GroupName><Files><File><FileName>motion.c</FileName><FileType>1</FileType><FilePath>..\src\motion.c</FilePath></File>
+<File><FileName>wire.c</FileName><FileType>1</FileType><FilePath>..\src\wire.c</FilePath></File>
+<File><FileName>task_store.c</FileName><FileType>1</FileType><FilePath>..\src\task_store.c</FilePath></File>
+<File><FileName>vehicle.c</FileName><FileType>1</FileType><FilePath>..\src\vehicle.c</FilePath></File></Files></Group>
+<Group><GroupName>STM32F405 board</GroupName><Files><File><FileName>main.c</FileName><FileType>1</FileType><FilePath>..\board\main.c</FilePath></File>
+<File><FileName>board.c</FileName><FileType>1</FileType><FilePath>..\board\board.c</FilePath></File>
+<File><FileName>flash.c</FileName><FileType>1</FileType><FilePath>..\board\flash.c</FilePath></File>
+<File><FileName>startup_stm32f405xx.s</FileName><FileType>2</FileType><FilePath>..\vendor\st\startup_stm32f405xx.s</FilePath></File></Files></Group></Groups></Target></Targets></Project>

@@ -1,6 +1,14 @@
-# DollyBot ESP32 控制系统
+# DollyBot 可编程运镜车
 
-第一版离线手机控制固件，ESP-IDF **v5.5.4**，目标 **经典 ESP32**，2 MB Flash 基线；无需 PSRAM、Node 构建工具或互联网资源。当前没有 STM32，电机接口仅输出模拟串口日志。
+整车从 Android App 经经典蓝牙 SPP 连接 ESP32，再经 USART3 将指令送到 STM32F405。STM32 根据四个磁编码器估计平移，根据 ICM-42688-P 估计航向，控制麦轮底盘与两轴云台。
+
+- STM32 固件和调试入口为 [Keil 工程](firmware/stm32/MDK-ARM/DollyBot.uvprojx)，引脚和时钟配置见 [CubeMX 文件](firmware/stm32/DollyBot.ioc)。
+- 蓝牙固件在 `firmware/esp32/` 内运行 `idf.py build`。Android 工程在 `android/` 内运行 `.\gradlew.bat testDebugUnitTest assembleDebug`。
+- 首次调车只需填写一个距离参数 **惯导系数**。标定、录制、手动确认回放和验收步骤见[整车联调说明](docs/replay.md)。
+
+## 原有 ESP32 网页控制工程
+
+第一版离线手机控制固件，ESP-IDF **v5.5.4**，目标 **经典 ESP32**，2 MB Flash 基线；无需 PSRAM、Node 构建工具或互联网资源。此网页工程位于仓库根目录，电机接口输出模拟串口日志。
 
 ## 编译
 

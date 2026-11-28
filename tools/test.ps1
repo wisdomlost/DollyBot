@@ -11,3 +11,9 @@ node --check web/app.js
 if ($LASTEXITCODE) { throw 'JavaScript syntax check failed' }
 node tests/test_web.cjs
 if ($LASTEXITCODE) { throw 'Web tests failed' }
+
+$motionSources = Get-ChildItem firmware/stm32/src -Filter '*.c' | ForEach-Object { $_.FullName }
+& $HostGcc -std=c11 -Wall -Wextra -Werror -Ifirmware/stm32/src -Ifirmware/esp32/main tests/test_replay.c $motionSources firmware/esp32/main/dollybot_protocol.c -lm -o build-host/test_replay.exe
+if ($LASTEXITCODE) { throw 'Replay test compilation failed' }
+& ./build-host/test_replay.exe
+if ($LASTEXITCODE) { throw 'Replay tests failed' }
