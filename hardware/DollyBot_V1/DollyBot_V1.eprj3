@@ -57,8 +57,8 @@
         "name": "mainboard",
         "board": "7f16c3a335840d66",
         "source": "",
-        "version": "1795521336800",
-        "updateTime": 1795521336800
+        "version": "1795871629292",
+        "updateTime": 1795871629292
       }
     },
     "sheets": {
@@ -86,8 +86,8 @@
         "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 4,
         "source": "",
-        "version": "1795521095675",
-        "updateTime": 1795521095675
+        "version": "1795871436332",
+        "updateTime": 1795871436332
       },
       "25abfb62d82102ae": {
         "uuid": "25abfb62d82102ae",
@@ -95,8 +95,8 @@
         "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 5,
         "source": "",
-        "version": "1795155201245",
-        "updateTime": 1795155201245
+        "version": "1795791705986",
+        "updateTime": 1795791705986
       },
       "c67e8f2a499acfa9": {
         "uuid": "c67e8f2a499acfa9",
@@ -113,8 +113,8 @@
         "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 1,
         "source": "",
-        "version": "1795521336800",
-        "updateTime": 1795521336800
+        "version": "1795871270066",
+        "updateTime": 1795871270066
       },
       "07505afa5ed67dbb": {
         "uuid": "07505afa5ed67dbb",
@@ -122,11 +122,20 @@
         "schematic_uuid": "6aa2e6655e9d6666",
         "zIndex": 2,
         "source": "",
-        "version": "1795516640460",
-        "updateTime": 1795516640460
+        "version": "1795871629292",
+        "updateTime": 1795871629292
       }
     },
     "pcbs": {
+      "791ab54a5918eb2d": {
+        "uuid": "791ab54a5918eb2d",
+        "title": "PCB1",
+        "board": "7f16c3a335840d66",
+        "parent_uuid": "",
+        "source": "",
+        "version": "1795872593082",
+        "updateTime": 1795872593082
+      },
       "74e5c6b999abaac9": {
         "uuid": "74e5c6b999abaac9",
         "title": "PCB_driver",
@@ -148,11 +157,11 @@
       "5de121ae4888a022": {
         "uuid": "5de121ae4888a022",
         "title": "PCB_mainboard",
-        "board": "7f16c3a335840d66",
+        "board": "",
         "parent_uuid": "",
         "source": "",
-        "version": "1795409338545",
-        "updateTime": 1795409338545
+        "version": "1795787797637",
+        "updateTime": 1795787797637
       }
     },
     "panels": {},
